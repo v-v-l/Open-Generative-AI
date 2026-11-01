@@ -780,7 +780,7 @@ body {
   flex-basis: auto;
 }
 .nora-header > .nora-queue-trigger {
-  margin-left: 0;
+  margin-left: auto;
 }
 .nora-sidebar-menu {
   padding: 16px 20px;
@@ -837,7 +837,7 @@ body {
     min-width: 0;
   }
   .nora-header > .nora-queue-trigger {
-    margin-left: 0;
+    margin-left: auto;
   }
   .nora-sidebar-menu {
     padding: 14px 16px;

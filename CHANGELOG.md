@@ -12,6 +12,9 @@ preserved separately in the original README below the fork notice.
 - Open the queue from a compact hamburger button as a desktop/mobile sidebar.
 
 ### Fixed
+- Reconcile lost Qwen submission/status responses using the existing request ID without duplicate generation.
+- Show bounded, redacted cloud provider error details instead of only generic HTTP failures.
+- Align the hamburger button with the sidebar on the right edge.
 - Replaced the clipped parameter popover with a scrolling modal and Apply/Cancel draft editing in photo and video studios.
 - Moved branding, references, catalog refresh and logout into the shared hamburger menu on desktop and mobile.
 - Random-seed drafts can obtain price estimates without allocating or changing the eventual generation seed.

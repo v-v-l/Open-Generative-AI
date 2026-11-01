@@ -202,6 +202,38 @@ class H3CleanupTest(unittest.TestCase):
 
 
 class EngineInputValidationTest(unittest.TestCase):
+    def test_lost_submission_reply_and_status_timeout_reconcile_without_second_post(self):
+        with tempfile.TemporaryDirectory() as directory:
+            buffer = io.BytesIO()
+            Image.new('RGB', (8, 8), 'blue').save(buffer, format='PNG')
+            responses = iter([TimeoutError('lost acknowledgement'),
+                              urllib.error.HTTPError('http://localhost/jobs/id', 404, 'not accepted yet', {}, io.BytesIO()),
+                              {'status':'running'}, TimeoutError('lost status'),
+                              {'status':'completed','outputs':[{'index':0}]}, buffer.getvalue()])
+            calls=[]
+            def request(path, *args, **kwargs):
+                calls.append(path)
+                value=next(responses)
+                if isinstance(value, Exception):raise value
+                return value
+            with patch.object(executor,'health',return_value={'available':True}), patch.object(executor,'request',side_effect=request), patch.object(executor.time,'sleep'):
+                outputs=executor.run_remote({'max_minutes':5},directory,[],lambda event:None,lambda:False)
+            self.assertEqual(calls.count('/jobs'),1)
+            self.assertEqual(len(outputs),1)
+            self.assertEqual(Path(outputs[0]['path']).read_bytes(),buffer.getvalue())
+            marker=json.loads((Path(directory)/'executor-submission.json').read_text())
+            self.assertFalse(marker['automatic_retries'])
+            self.assertTrue(all(path.startswith('/jobs/'+marker['request_id']) for path in calls[1:]))
+
+    def test_rejected_submission_does_not_poll_or_resubmit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            error=urllib.error.HTTPError('http://localhost/jobs',400,'bad input',{},io.BytesIO())
+            self.addCleanup(error.close)
+            with patch.object(executor,'health',return_value={'available':True}), patch.object(executor,'request',side_effect=error) as request:
+                with self.assertRaises(urllib.error.HTTPError):
+                    executor.run_remote({'max_minutes':5},directory,[],lambda event:None,lambda:False)
+            self.assertEqual(request.call_count,1)
+
     def test_native_validation_does_not_probe_remote_capabilities(self):
         with patch.dict(os.environ, {"NORA_QWEN_EXECUTOR_URL": "http://127.0.0.1:36447"}), patch.object(engine, "capabilities", side_effect=AssertionError("Live capability lookup is forbidden during validation")), patch.object(engine, "_qwen_executor", side_effect=AssertionError("Executor network access is forbidden during validation")):
             engine.validate_job({"kind": "photo", "model": "qwen-local", "prompt": "literal", "max_minutes": 30}, [])

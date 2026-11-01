@@ -206,3 +206,17 @@ scrolling field area and reachable **Применить / Отменить** but
 a draft until Apply; Cancel, Escape, close and backdrop discard them. Applying
 updates the supported parameters together without changing the prompt, references
 or separately selected seed. Closing returns focus to the parameter button.
+
+## Transport failure diagnostics
+
+Qwen submission uses a bounded120s transfer timeout. If acknowledgement is lost,
+the client checks the existing opaque request ID with GET requests only; it never
+repeats the submission. Transient status-read failures likewise resume monitoring
+within the original job deadline. An unresolved request ID remains in the private
+submission evidence and must be checked before explicitly retrying.
+
+Cloud HTTP errors retain only bounded, redacted JSON diagnostic fields (message,
+code, type, parameter and request ID), which can explain future failures in the
+queue. Raw provider bodies, keys and inline reference data are not saved. Errors
+recorded before this change may have only a status code; missing explanations
+cannot be reconstructed or assumed to be a policy rejection.

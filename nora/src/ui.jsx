@@ -368,7 +368,6 @@ export function Shell({ ImageStudio, VideoStudio }) {
   return (
     <div className="nora-app">
       <header className="nora-header">
-        <Queue />
         <nav>
           {studios.map(([id, label]) => (
             <button
@@ -380,6 +379,7 @@ export function Shell({ ImageStudio, VideoStudio }) {
             </button>
           ))}
         </nav>
+        <Queue />
       </header>
       {isReadOnly() && (
         <div className="nora-readonly" role="status">

@@ -176,6 +176,48 @@ class CloudContracts(unittest.TestCase):
         self.assertNotIn("PRIVATE_REFERENCE", saved)
         self.assertEqual(json.loads(saved)["http_status"], 429)
 
+    def test_json_http_diagnostic_retains_reason_code_and_request_id_without_reflected_secrets(self):
+        job=self.openai_job()
+        encoded=base64.b64encode(self.buffer.getvalue()).decode()
+        body={'error':{'code':'invalid_value','type':'invalid_request_error','param':'quality',
+                       'message':'Invalid value for quality. test-secret-openai '+job['prompt']+' data:image/jpeg;base64,'+encoded+' https://private.example/ref?token=secret',
+                       'raw_request':{'private_reference':encoded}},'untrusted_extra':'PRIVATE_REFERENCE'}
+        error=urllib.error.HTTPError(cloud.OPENAI+'/images/edits',400,'Bad Request',{'x-request-id':'req-diagnostic-123'},io.BytesIO(json.dumps(body).encode()))
+        with patch.object(cloud,'_request',side_effect=error) as request:
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                cloud.run_job(job,self.root/'diagnostic',[self.asset],self.events.append,lambda:False)
+        request.assert_called_once()
+        saved=(self.root/'diagnostic/cloud-error.json').read_text()
+        data=json.loads(saved)
+        self.assertEqual(data['provider_request_id'],'req-diagnostic-123')
+        self.assertEqual(data['provider_error']['code'],'invalid_value')
+        self.assertEqual(data['provider_error']['param'],'quality')
+        self.assertIn('Invalid value for quality',str(caught.exception))
+        for private in ('test-secret',job['prompt'],encoded,'private.example','PRIVATE_REFERENCE','raw_request'):
+            self.assertNotIn(private,saved)
+            self.assertNotIn(private,str(caught.exception))
+        self.assertFalse(data['automatic_retries'])
+        self.assertEqual(caught.exception.provider_request_id,'req-diagnostic-123')
+
+    def test_transport_captures_http_diagnostic_once_without_retrying(self):
+        error=urllib.error.HTTPError(cloud.OPENAI+'/images/generations',400,'Bad Request',{'x-request-id':'req-once'},io.BytesIO(b'{"error":{"message":"Invalid image size","code":"invalid_size"}}'))
+        with patch.object(cloud.urllib.request,'build_opener') as build:
+            build.return_value.open.side_effect=error
+            with self.assertRaises(urllib.error.HTTPError):cloud._request(cloud.OPENAI+'/images/generations',{'prompt':'test'})
+            build.return_value.open.assert_called_once()
+        self.assertEqual(error.provider_error['code'],'invalid_size')
+        self.assertEqual(error.provider_request_id,'req-once')
+        self.assertIn('Invalid image size',str(error))
+
+    def test_non_json_or_oversized_http_bodies_never_become_diagnostics(self):
+        for raw in (b'<html>test-secret-openai PRIVATE_REFERENCE_BASE64</html>',b'{"error":{"message":"'+b'X'*70000+b'"}}'):
+            body=io.BytesIO(raw)
+            error=urllib.error.HTTPError(cloud.OPENAI+'/images/edits',400,'Bad Request',{'x-request-id':'req-bounded'},body)
+            diagnostic=cloud._http_diagnostic(error)
+            self.assertEqual(diagnostic,{})
+            self.assertEqual(error.provider_request_id,'req-bounded')
+            self.assertEqual(str(error),'HTTP Error 400: Bad Request')
+
     def test_catalog_exposes_booleans_not_credentials(self):
         text = json.dumps(cloud.catalog())
         self.assertNotIn("test-secret", text)

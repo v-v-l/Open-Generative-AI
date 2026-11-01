@@ -117,20 +117,40 @@ def run_remote(job, job_dir, assets, progress, cancelled):
     if cancelled():
         raise InterruptedError("Cancelled before Qwen executor submission")
     marker.write_text(json.dumps({"request_id": identifier, "job": safe_job, "automatic_retries": False}, indent=2))
-    state = request("/jobs", payload, timeout=45)
-    progress({"stage": "qwen_executor_accepted", "executor_request_id": identifier})
     deadline = time.monotonic() + job.get("max_minutes", 20)*60 + 60
+    state = None
     try:
-        while state.get("status") not in ("completed", "failed", "cancelled", "interrupted"):
+        try:
+            state = request("/jobs", payload, timeout=120)
+        except urllib.error.HTTPError:
+            raise
+        except (OSError, urllib.error.URLError):
+            # The executor may already have accepted a request whose reply was lost.
+            # Reconcile its opaque ID using GET only; never repeat the POST.
+            progress({"stage": "qwen_executor_reconciling", "executor_request_id": identifier})
+        acknowledgement_deadline = min(deadline, time.monotonic() + 120)
+        if state is not None:
+            progress({"stage": "qwen_executor_accepted", "executor_request_id": identifier})
+        while state is None or state.get("status") not in ("completed", "failed", "cancelled", "interrupted"):
             if cancelled():
                 request("/jobs/" + identifier + "/cancel", {}, timeout=10)
                 raise InterruptedError("Qwen executor job cancelled")
             if time.monotonic() > deadline:
                 request("/jobs/" + identifier + "/cancel", {}, timeout=10)
                 raise TimeoutError("Qwen executor monitoring deadline reached")
-            progress({"stage": "qwen_executor_generating", "executor_request_id": identifier})
+            if state is None and time.monotonic() > acknowledgement_deadline:
+                raise TimeoutError("Qwen executor acknowledgement unavailable; saved request ID must be checked before retrying")
+            progress({"stage": "qwen_executor_generating" if state else "qwen_executor_reconciling", "executor_request_id": identifier})
             time.sleep(2)
-            state = request("/jobs/" + identifier, timeout=15)
+            try:
+                state = request("/jobs/" + identifier, timeout=15)
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404 or state is not None:
+                    raise
+                exc.close()
+            except (OSError, urllib.error.URLError):
+                # A lost status response is not an inference failure.
+                continue
         (folder / "executor-result.json").write_text(json.dumps(state, indent=2))
         if state.get("status") != "completed":
             raise RuntimeError("Qwen executor job " + str(state.get("status")) + "; inspect the workstation job evidence before retrying")

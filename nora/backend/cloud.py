@@ -130,6 +130,55 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _diagnostic_text(value, sensitive=(), limit=1000):
+    """Retain useful provider explanations without reflected credentials/media."""
+    if not isinstance(value,str):return None
+    for secret in sensitive:
+        if isinstance(secret,str) and secret:value=value.replace(secret,'[redacted]')
+    value=re.sub(r'(?i)data:[^\s"\']+','[inline data redacted]',value)
+    value=re.sub(r'(?i)(?:https?|postgres(?:ql)?)://[^\s"\']+','[URL redacted]',value)
+    value=re.sub(r'(?i)(bearer\s+|(?:api[_-]?key|token|password|secret)\s*[=:]\s*)[^\s,;]+',r'\1[redacted]',value)
+    value=re.sub(r'\bsk-[A-Za-z0-9_-]+','[redacted]',value)
+    value=re.sub(r'[A-Za-z0-9+/_=-]{80,}','[encoded data redacted]',value)
+    value=re.sub(r'(?:/home/|/tmp/|/var/|/opt/)[^\s"\']+','[path redacted]',value)
+    return value[:limit]
+
+
+def _http_diagnostic(error, sensitive=()):
+    """Read a bounded JSON error once; never persist an upstream response body."""
+    try:
+        sensitive=tuple(sensitive)+tuple(_credentials().values())
+        request_id=error.headers.get('x-request-id') if error.headers else None
+        if isinstance(request_id,str) and re.fullmatch(r'[A-Za-z0-9_-]{1,200}',request_id):
+            error.provider_request_id=_diagnostic_text(request_id,sensitive,200)
+        if not hasattr(error,'provider_error'):
+            raw=error.read(65537)
+            error.close()
+            parsed=json.loads(raw) if len(raw)<=65536 else None
+            upstream=parsed.get('error') if isinstance(parsed,dict) else None
+            diagnostic={}
+            if isinstance(upstream,dict):
+                for key in ('code','type','param'):
+                    value=upstream.get(key)
+                    if type(value) is int:value=str(value)
+                    if isinstance(value,str) and re.fullmatch(r'[A-Za-z0-9_.\[\]-]{1,150}',value):
+                        diagnostic[key]=_diagnostic_text(value,sensitive,150)
+                message=_diagnostic_text(upstream.get('message'),sensitive)
+                if message:diagnostic['message']=message
+            error.provider_error=diagnostic
+        else:
+            error.provider_error={key:_diagnostic_text(value,sensitive,1000 if key=='message' else 150)
+                                  for key,value in error.provider_error.items() if key in ('code','type','param','message')}
+        if error.provider_error.get('message'):
+            # HTTPError.__str__ uses msg, keeping its original status/type intact.
+            error.msg=error.provider_error['message']
+        return error.provider_error
+    except Exception:
+        # Diagnostic parsing must never replace the original transport failure.
+        error.provider_error={}
+        return {}
+
+
 def _request(url, payload=None, headers=None, timeout=60, raw=False):
     # API origins are fixed constants. Redirects cannot forward credentials elsewhere.
     if not (url.startswith(ORIGIN + "/") or url.startswith(OPENAI + "/")):
@@ -139,14 +188,18 @@ def _request(url, payload=None, headers=None, timeout=60, raw=False):
     if payload is not None and not isinstance(payload, bytes):
         h["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=h)
-    with urllib.request.build_opener(_NoRedirect).open(req, timeout=timeout) as response:
-        data = response.read()
-        if raw:
-            return data
-        result = json.loads(data)
-        if isinstance(result, dict) and response.headers.get("x-request-id"):
-            result["_request_id"] = response.headers["x-request-id"]
-        return result
+    try:
+        with urllib.request.build_opener(_NoRedirect).open(req, timeout=timeout) as response:
+            data = response.read()
+            if raw:
+                return data
+            result = json.loads(data)
+            if isinstance(result, dict) and response.headers.get("x-request-id"):
+                result["_request_id"] = response.headers["x-request-id"]
+            return result
+    except urllib.error.HTTPError as error:
+        _http_diagnostic(error,[payload.get('prompt','')] if isinstance(payload,dict) else ())
+        raise
 
 
 def _video_descriptor(model, timestamp):
@@ -504,10 +557,13 @@ def run_job(job, job_dir, assets, progress, cancelled):
             raise ValueError("Provider returned no usable output")
         return {"outputs": outputs, "billing": billing, "provider_request_id": ident}
     except BaseException as exc:
+        diagnostic=_http_diagnostic(exc,(job.get('prompt',''),)) if isinstance(exc,urllib.error.HTTPError) else None
+        ident=ident or getattr(exc,'provider_request_id',None)
         exc.billing = billing
         exc.provider_request_id = ident
         _save(folder / "cloud-billing.json", billing)
         # Do not persist raw HTTP bodies: upstream text could echo submitted references.
         _save(folder / "cloud-error.json", {"type": type(exc).__name__, "http_status": getattr(exc, "code", None),
-                                          "provider_request_id": ident, "automatic_retries": False, "billing": billing})
+                                          "provider_request_id": ident, "provider_error":diagnostic,
+                                          "automatic_retries": False, "billing": billing})
         raise
