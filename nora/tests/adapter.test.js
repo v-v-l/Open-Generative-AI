@@ -175,4 +175,8 @@ test("friendly OpenAI display names do not change request model IDs", () => {
   const mapped = modelFromDescriptor(model, "t2i");
   assert.equal(mapped.name, "OpenAI GPT Image 2.5 Sunburst");
   assert.equal(mapped.id, model.id);
+  assert.match(mapped.provider_name, /2026-09-08/);
+  const alias=modelFromDescriptor({...model,id:"openai:gpt-image-2.5-sunburst",remote_model:"gpt-image-2.5-sunburst"},"t2i");
+  assert.equal(mapped.name,alias.name);
+  assert.notEqual(mapped.provider_name,alias.provider_name);
 });

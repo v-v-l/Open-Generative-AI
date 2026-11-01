@@ -118,7 +118,7 @@ export function modelFromDescriptor(m, mode) {
     provider: m.provider,
     provider_name:
       m.provider === "openai"
-        ? "OpenAI direct"
+        ? "OpenAI direct" + ((m.remote_model || m.id).match(/-(20\d{2}-\d{2}-\d{2})$/)?.[1] ? " · " + (m.remote_model || m.id).match(/-(20\d{2}-\d{2}-\d{2})$/)[1] : "")
         : m.provider === "openrouter"
           ? "OpenRouter"
           : m.provider,
