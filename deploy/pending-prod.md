@@ -243,3 +243,23 @@ Evidence outside Git: work/studio-public-transport-recovery-verification.json,
 work/studio-header-right-browser.js and desktop/mobile screenshots. Private runtime
 audit remains beside the recovered job. No migrations, new secrets or new services;
 transport topology and data schema are unchanged.
+
+## Promoted — 2026-11-01: reference replace/remove actions
+
+Release `nora-v4h-reference-actions`, source `8d25784`.
+
+- [x] Library user-upload cards offer Replace/Delete for photographs and videos. Replacement keeps LoRA/slot/selection position; confirmed deletion clears active membership/selection/export and restores empty angle slots.
+- [x] Soft archive retains original bytes privately while archived IDs disappear from catalog/defaults and reject original/thumbnail/download/export access. Legacy read-only groups and global read-only mode remain protected. Historical active orphan uploads can be removed without modifying their current replacement slot.
+- [x] Added authenticated same-origin POST /references/api/remove {id}; occupied-slot and LoRA replacement use replace_id with stale409 protection. Failed validation/persistence preserves the existing active item.
+- [x] Studio attachment cards replace each supported role in place only after successful upload; errors retain the old file, queue submission is blocked while uploading, and existing removal controls remain. Late completions cannot leak across model changes/unmounts.
+- [x] Full backend suite96 tests total,4 PostgreSQL-only skipped; final reference suite32 tests passed. Frontend check/typecheck/build and isolated actual-form browser tests passed for photo, all H3 roles, failures/retry, order and mobile390.
+- [x] Library browser tests passed photo↔video LoRA replacement, selected index preservation, slot replacement/delete/reupload, reload, failures/retry, orphan controls, confirmation, read-only and mobile.
+- [x] Saved a private manifest snapshot, verified paused/idle queue, safely activated backend, passed candidate negative authentication/Host/peer gate and activated frontend.
+- [x] Public smoke verified deployed studio/library action code and confirmation, rejected malformed remove with400 before any mutation, retained37 active references and14 jobs before/after, no page errors and zero paid test calls.
+
+Evidence outside Git: work/studio-public-reference-actions-verification.json,
+work/studio-replace-browser.js, work/studio-replace-photo-mobile.png,
+work/studio-replace-video-mobile.png and library mutations/delete-confirm screenshots.
+No new dependencies, secrets, services or database migrations. Portable manifest
+records gain optional archive metadata on mutation; retain archive-aware backend
+versions on rollback so archived items do not reappear. User journey/manual updated.
