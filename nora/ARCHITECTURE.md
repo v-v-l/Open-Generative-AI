@@ -1,9 +1,10 @@
 # Generation Studio architecture
 
-## Migration target — deployment pending verification
+## Deployed topology — verified 2026-11-01
 
-This diagram describes the requested migration. It is not proof that these services
-have been deployed; the deployment README and release ledger own that status.
+Release `nora-v2-9215134` is live. The old workstation backend and full-app tunnel
+are stopped and disabled. Public login, migrated asset hash and Qwen disconnection/
+reconnection were verified without inference; see the deployment ledger.
 
 ```mermaid
 flowchart LR

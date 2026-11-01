@@ -1,6 +1,6 @@
 # Nora generation journey
 
-Verified against the original studio forms plus Nora adapters at `8b61e89`,
+Verified against the original studio forms plus Nora adapters at `9215134`,
 2026-11-01. See the deployment ledger for live browser verification.
 
 ```mermaid
@@ -20,3 +20,7 @@ inside the model when guide/output aspect ratios differ; the form explains this.
 Other MuAPI studios are explicitly unconnected. Queued or running work blocks
 catalog refresh so its endpoint settings are not replaced underneath it. Empty
 prompts do not trigger cost-estimate requests.
+
+Qwen-only executor readiness updates with state polling. Offline Qwen disables
+submission/retry while cloud/H3 remain usable; queued offline Qwen work waits for
+its executor without blocking eligible cloud jobs.

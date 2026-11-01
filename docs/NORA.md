@@ -29,7 +29,7 @@ npm run build
 ```
 
 The backend uses Python 3.11+ and the dependencies in
-`nora/backend/requirements.txt` (Pillow). Existing ComfyUI/model installations and
+`nora/backend/requirements.txt` (Pillow and optional PostgreSQL driver). Existing ComfyUI/model installations and
 SSH worker configuration are separate runtime dependencies.
 
 Run backend tests from the repository root with
@@ -60,9 +60,14 @@ exact prompt preservation, model-specific controls, prices, queue actions and
 login in a browser. Only then fast-forward the `nora` branch to its candidate
 commit and build/deploy a new release. Push `nora` to our fork, never to upstream.
 
-Keep the previous static release for rollback. Queue SQLite, uploaded references,
-provider accounting and output files are outside the frontend release. Do not
-roll back this data or resubmit jobs just because the UI was rolled back.
+Production API/queue/cloud/H3 control run on apps, PostgreSQL on databases:5466.
+The workstation hosts only the authenticated Qwen executor. See
+`nora/deploy/README.md` and `nora/ARCHITECTURE.md` for ports, data and update contracts.
+
+Keep the previous immutable release for rollback. PostgreSQL, references, provider
+accounting and output files stay outside releases. Do not roll back this data or
+resubmit jobs merely because application source was rolled back. SQLite remains
+available for isolated development; production no longer uses it.
 
 For a frontend/proxy-only update, stage a new immutable apps release, run the
 private candidate access gate, then activate that release. Reuse the existing
