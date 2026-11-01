@@ -1,0 +1,12 @@
+services:
+  frontend:
+    image: caddy:2.11.2-alpine
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./Apps.Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./dist:/srv/open-generative-ai:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

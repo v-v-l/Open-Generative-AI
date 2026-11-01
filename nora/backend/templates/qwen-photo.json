@@ -1,0 +1,129 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "qwen_image_2.1_bf16.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_8b_bf16.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "QwenImage21Cache",
+    "inputs": {
+      "model": [
+        "5",
+        0
+      ],
+      "device": "cpu",
+      "dtype": "default"
+    }
+  },
+  "100": {
+    "class_type": "TextEncodeQwenImage21",
+    "inputs": {
+      "clip": [
+        "2",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "prompt": "alice_v1, a realistic frontal portrait photograph of the 20-year-old adult woman from <image1>, neutral upright head, soft daylight, natural skin texture, plain background.",
+      "negative_prompt": "",
+      "resolution": 512,
+      "images.image_1": [
+        "10",
+        0
+      ]
+    }
+  },
+  "101": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 512,
+      "height": 512,
+      "batch_size": 1
+    }
+  },
+  "102": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "100",
+        0
+      ],
+      "negative": [
+        "100",
+        1
+      ],
+      "latent_image": [
+        "101",
+        0
+      ],
+      "seed": 2026103132,
+      "steps": 2,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1
+    }
+  },
+  "103": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "102",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "104": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "103",
+        0
+      ],
+      "filename_prefix": "qwen21-bf16-local-v1/smoke"
+    }
+  },
+  "5": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "lora_name": "Alice_Qwen21_pilot196.safetensors",
+      "strength_model": 0.8
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "alice-headless-face.png"
+    }
+  }
+}

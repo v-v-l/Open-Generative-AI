@@ -1,0 +1,298 @@
+:root {
+  color-scheme: dark;
+  --color-primary: #22d3ee;
+  --bg-app: #050505;
+  --bg-panel: #0a0a0a;
+  --bg-card: #111;
+  --border-color: #27272a;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #050505;
+  color: white;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+.nora-app {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.nora-header {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  border-bottom: 1px solid #ffffff10;
+  min-height: 65px;
+  padding: 12px 22px;
+}
+.nora-brand {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: white;
+  text-decoration: none;
+}
+.nora-brand small {
+  font-weight: 400;
+  color: #22d3ee;
+  margin-left: 7px;
+}
+.nora-header nav {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+  overflow-x: auto;
+}
+.nora-header button,
+.nora-queue button,
+.nora-unavailable button {
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 7px 11px;
+  color: #a1a1aa;
+  font-size: 12px;
+  background: transparent;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.nora-header button.active {
+  background: #ffffff0b;
+  color: white;
+}
+.nora-header button:hover,
+.nora-queue button:hover {
+  background: #ffffff0a;
+  color: white;
+}
+.nora-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+.nora-studio-page {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.nora-studio-page[hidden] {
+  display: none;
+}
+.nora-summary {
+  padding: 8px 13px;
+  border-top: 1px solid #ffffff0b;
+  color: #8e8e97;
+  font-size: 10px;
+  line-height: 1.5;
+  flex-basis: 100%;
+  width: 100%;
+}
+.nora-summary p {
+  margin: 5px 0;
+}
+.nora-summary summary {
+  cursor: pointer;
+  color: #ceced4;
+}
+.nora-estimate strong {
+  color: #dddde3;
+  font-weight: 500;
+}
+.nora-estimate small {
+  display: block;
+}
+.nora-warning {
+  color: #f2b197;
+}
+.nora-ref-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 7px 0;
+}
+.nora-ref-tray > div {
+  position: relative;
+  width: 65px;
+}
+.nora-ref-tray img {
+  width: 65px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.nora-ref-tray span {
+  font-size: 9px;
+}
+.nora-ref-tray button {
+  position: absolute;
+  right: 0;
+  top: 0;
+  background: #111a;
+  border-radius: 20px;
+  color: white;
+  padding: 1px 6px;
+}
+.nora-ref-tray > label {
+  background: #ffffff08;
+  padding: 8px;
+  border: 1px dashed #ffffff20;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.nora-ref-tray input {
+  display: none;
+}
+.nora-queue {
+  border-bottom: 1px solid #ffffff10;
+  background: #0a0a0a;
+  font-size: 11px;
+}
+.nora-queue-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 20px;
+}
+.nora-queue-head > span {
+  flex: 1;
+  color: #71717a;
+}
+.nora-queue-head > button:last-child {
+  border: 1px solid #ffffff15;
+  color: #d4d4d8;
+}
+.nora-queue-body {
+  max-height: 320px;
+  overflow: auto;
+  padding: 0 22px 15px;
+}
+.nora-queue-body article {
+  border-top: 1px solid #ffffff10;
+  padding: 10px 0;
+}
+.nora-queue-body header {
+  display: flex;
+  justify-content: space-between;
+}
+.nora-queue-body p {
+  white-space: pre-wrap;
+  max-height: 60px;
+  overflow: auto;
+  color: #a1a1aa;
+  margin: 5px 0;
+}
+.nora-queue-body small {
+  color: #b3d881;
+}
+.nora-queue-body a {
+  display: inline-block;
+  padding: 5px 10px;
+  color: #22d3ee;
+}
+.nora-footer {
+  padding: 5px 18px;
+  border-top: 1px solid #ffffff08;
+  color: #52525b;
+  font-size: 9px;
+  text-align: right;
+}
+.nora-unavailable {
+  padding: 70px 30px;
+  max-width: 750px;
+  margin: auto;
+  color: #a1a1aa;
+  line-height: 1.8;
+}
+.nora-unavailable h1 {
+  font-size: 28px;
+  color: white;
+  margin-bottom: 15px;
+}
+.nora-unavailable button {
+  border: 1px solid #ffffff20;
+  margin-top: 20px;
+}
+.nora-toast {
+  position: fixed;
+  right: 20px;
+  top: 80px;
+  z-index: 999;
+  background: #212127;
+  border: 1px solid #ffffff25;
+  border-radius: 12px;
+  padding: 14px 20px;
+  font-size: 13px;
+  box-shadow: 0 12px 35px #0008;
+}
+.nora-loading {
+  padding: 70px 30px;
+  text-align: center;
+  color: #a1a1aa;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #ffffff20;
+  border-radius: 10px;
+}
+@media (max-width: 800px) {
+  .nora-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .nora-header nav {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .nora-header > button {
+    margin-left: auto;
+  }
+  .nora-queue-head {
+    padding: 4px 8px;
+    gap: 3px;
+    flex-wrap: wrap;
+  }
+  .nora-queue-head > span {
+    display: none;
+  }
+  .nora-queue-head > button:last-child {
+    margin-left: auto;
+  }
+  .nora-footer {
+    display: none;
+  }
+}
+.nora-readonly {
+  background: #15212a;
+  color: #8dc5e0;
+  padding: 8px 20px;
+  font-size: 12px;
+  border-bottom: 1px solid #2c485b;
+}
+.nora-rates pre {
+  white-space: pre-wrap;
+  max-height: 150px;
+  overflow: auto;
+  font-size: 9px;
+}
+.nora-rates a {
+  color: #22d3ee;
+  text-decoration: underline;
+}
+.nora-header button:disabled,
+.nora-queue button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

@@ -1,0 +1,148 @@
+import { isReadOnly } from "./runtime.js";
+import { runtime, descriptor, request, refresh, publish } from "./runtime.js";
+const imageExtensions = /\.(png|jpe?g|webp)$/i;
+export function refsFor(params, m) {
+  const refs = [];
+  const append = (urls, role) => {
+    for (const url of (Array.isArray(urls) ? urls : [urls]).filter(Boolean)) {
+      const id = url.split("/").pop();
+      if (!/^[a-f0-9]{32}$/.test(id))
+        throw Error(
+          "Прикрепите файл заново: нужен референс, загруженный в нашу студию",
+        );
+      if (!refs.some((a) => a.id === id && a.role === role))
+        refs.push({ id, role });
+    }
+  };
+  if (m.kind === "photo")
+    append(
+      params.images_list ||
+        params.image_urls ||
+        params.imageUrls ||
+        params.image_url,
+      "image",
+    );
+  else {
+    if (params.image_url)
+      append(params.image_url, m.roles.start ? "start" : "image");
+    append(
+      params.last_image || params.last_image_url || params.end_image_url,
+      "end",
+    );
+    append(params.images_list || params.image_urls, "image");
+    append(params.videos_list || params.video_url, "video");
+    append(params.audios_list || params.audio_url, "audio");
+  }
+  for (const a of runtime.extraAssets[m.id] || [])
+    refs.push({
+      id: a.id,
+      role: a.role,
+      ...(a.include_audio !== undefined
+        ? { include_audio: a.include_audio }
+        : {}),
+    });
+  return refs;
+}
+export function buildJob(params) {
+  const m = descriptor(params.model);
+  if (!m)
+    throw Error(
+      "Эта MuAPI-модель не подключена к нашему backend. Выберите модель из нашего каталога.",
+    );
+  const job = {
+    kind: m.kind,
+    model: m.id,
+    prompt: params.prompt ?? "",
+    seed:
+      params.seed == null ||
+      params.seed === "" ||
+      params.seed === "random" ||
+      Number(params.seed) < 0
+        ? null
+        : Number(params.seed),
+    batch_count: 1,
+    assets: refsFor(params, m),
+  };
+  if (params.max_cost_usd) job.max_cost_usd = Number(params.max_cost_usd);
+  if (["openai", "openrouter"].includes(m.provider)) {
+    for (const [key, spec] of Object.entries(m.settings || {}))
+      if (key !== "seed")
+        job[key] = params[key] ?? spec.default ?? spec.values?.[0];
+  } else {
+    for (const key of [
+      "width",
+      "height",
+      "steps",
+      "frames",
+      "lora_enabled",
+      "lora_strength",
+      "lora_name",
+      "max_minutes",
+      "generated_audio",
+      "video_ref_audio",
+    ])
+      if (params[key] !== undefined && params[key] !== "")
+        job[key] = params[key];
+  }
+  return job;
+}
+async function enqueue(_key, params) {
+  if (isReadOnly()) throw Error("Режим просмотра: генерация отключена");
+  const job = buildJob(params);
+  if (descriptor(params.model)?.credential_configured === false)
+    throw Error("Исполнитель недоступен или API-ключ не настроен на сервере");
+  const response = await request("/api/jobs", job);
+  await refresh();
+  window.dispatchEvent(
+    new CustomEvent("nora-enqueued", { detail: response.jobs }),
+  );
+  return { queued: true, request_id: response.jobs[0]?.id };
+}
+export const generateImage = enqueue,
+  generateI2I = enqueue,
+  generateVideo = enqueue,
+  generateI2V = enqueue,
+  processV2V = enqueue;
+export async function uploadFile(_key, file, onProgress) {
+  if (isReadOnly()) throw Error("Режим просмотра: загрузка отключена");
+  if (file.size > 100 * 1024 * 1024)
+    throw Error("Максимальный размер — 100 МБ");
+  onProgress?.(0);
+  const data = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const asset = await request("/api/uploads", {
+    name: file.name,
+    mime: file.type,
+    data,
+  });
+  onProgress?.(100);
+  return asset.url;
+}
+export async function getUserBalance() {
+  return null;
+}
+export function historyFor(kind) {
+  return (runtime.state?.jobs || [])
+    .filter((j) => j.kind === kind && !runtime.hiddenJobs.has(j.id))
+    .flatMap((j) =>
+      (j.outputs || [])
+        .filter((o) => o.kind === (kind === "photo" ? "image" : "video"))
+        .map((o) => ({
+          id: j.id,
+          url: o.url,
+          prompt: j.prompt,
+          model: j.model,
+          aspect_ratio: j.aspect_ratio || "",
+          timestamp: j.updated_at || j.created_at,
+          type: kind === "photo" ? "image" : "video",
+        })),
+    );
+}
+export function hideHistory(id) {
+  runtime.hiddenJobs.add(id);
+  publish();
+}

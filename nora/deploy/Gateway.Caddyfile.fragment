@@ -1,0 +1,13 @@
+# Candidate site block for /etc/caddy/Caddyfile on gateway.
+media.bp-flow.com {
+    encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Robots-Tag "noindex, nofollow"
+        Referrer-Policy "same-origin"
+        X-Content-Type-Options "nosniff"
+    }
+    reverse_proxy 192.168.100.70:36443 {
+        header_up Host media.bp-flow.com
+    }
+}

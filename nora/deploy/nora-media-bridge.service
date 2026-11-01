@@ -1,0 +1,14 @@
+[Unit]
+Description=Private Nora application reverse tunnel to apps
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/victor/Projects/Nora/apps/open-generative-ai/nora/deploy/start-media-studio-bridge.sh
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

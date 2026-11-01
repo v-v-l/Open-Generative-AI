@@ -1,0 +1,18 @@
+[Unit]
+Description=Authenticated Nora generation backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/victor/Projects/Nora
+Environment=NORA_PROJECT_ROOT=/home/victor/Projects/Nora
+EnvironmentFile=/home/victor/Projects/Nora/work/generation-studio/public-auth.env
+ExecStart=/usr/bin/python3 /home/victor/Projects/Nora/apps/open-generative-ai/nora/backend/server.py --port 36440 --public-origin https://media.bp-flow.com --web-root /home/victor/Projects/Nora/apps/open-generative-ai/nora/dist
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

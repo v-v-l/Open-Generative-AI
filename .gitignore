@@ -36,3 +36,15 @@ out/
 .env
 .env.*
 !.env.example
+
+# Nora runtime state is external to this source checkout.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+nora/outputs/
+nora/work/
+nora/uploads/
+/outputs/
+/work/
+/uploads/
+/nora/src/studio.generated.css

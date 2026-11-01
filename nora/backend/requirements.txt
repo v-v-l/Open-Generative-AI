@@ -1,0 +1,2 @@
+# Standard-library server and adapters; Pillow normalizes raster references/outputs.
+Pillow==13.0.0

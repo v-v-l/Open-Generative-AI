@@ -77,7 +77,7 @@
     "modelDoesNotSupportReference": "{family} does not support {mediaType} references.",
     "sourceDoesNotAcceptImages": "The selected source does not accept images.",
     "waitForCurrentUpload": "Wait for the current upload to finish, then add these files again.",
-    "imageExceeds10MB": "Image exceeds 10MB limit.",
+    "imageExceeds10MB": "Image exceeds 100MB limit.",
     "labelExceedsLimit": "{label} exceeds {limit}MB limit.",
     "labelUploadFailed": "{label} upload failed: {message}",
     "noPromptForModel": "Please enter a prompt for this model.",

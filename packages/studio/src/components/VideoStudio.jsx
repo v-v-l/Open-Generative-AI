@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
+import { NoraSummary } from "@nora/ui";
+import { isReadOnly as noraReadOnly } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateVideo, generateI2V, processV2V, uploadFile } from "../muapi.js";
 import { formatErrorMessage } from "../utils/formatError.js";
@@ -1649,10 +1651,10 @@ export default function VideoStudio({
       const selectedFiles = Array.from(files).slice(0, remaining);
       if (selectedFiles.length === 0) return;
       const options = slot.mediaType === "image"
-        ? { label: slot.label, maxBytes: 10 * 1024 * 1024, setUploading: setImageUploading, setProgress: setImageProgress }
+        ? { label: slot.label, maxBytes: 100 * 1024 * 1024, setUploading: setImageUploading, setProgress: setImageProgress }
         : slot.mediaType === "video"
-          ? { label: slot.label, maxBytes: 50 * 1024 * 1024, setUploading: setVideoUploading, setProgress: setVideoProgress }
-          : { label: slot.label, maxBytes: 50 * 1024 * 1024, setUploading: setAudioUploading, setProgress: setAudioProgress };
+          ? { label: slot.label, maxBytes: 100 * 1024 * 1024, setUploading: setVideoUploading, setProgress: setVideoProgress }
+          : { label: slot.label, maxBytes: 100 * 1024 * 1024, setUploading: setAudioUploading, setProgress: setAudioProgress };
 
       const uploadKey = `${draftKey}:${slot.id}`;
       workflowUploadSlotRef.current = uploadKey;
@@ -1767,10 +1769,10 @@ export default function VideoStudio({
       if (remaining === 0) return;
 
       const options = mediaType === "image"
-        ? { label: copy.media.image, maxBytes: 10 * 1024 * 1024, setUploading: setImageUploading, setProgress: setImageProgress }
+        ? { label: copy.media.image, maxBytes: 100 * 1024 * 1024, setUploading: setImageUploading, setProgress: setImageProgress }
         : mediaType === "video"
-          ? { label: copy.media.video, maxBytes: 50 * 1024 * 1024, setUploading: setVideoUploading, setProgress: setVideoProgress }
-          : { label: copy.media.audio, maxBytes: 50 * 1024 * 1024, setUploading: setAudioUploading, setProgress: setAudioProgress };
+          ? { label: copy.media.video, maxBytes: 100 * 1024 * 1024, setUploading: setVideoUploading, setProgress: setVideoProgress }
+          : { label: copy.media.audio, maxBytes: 100 * 1024 * 1024, setUploading: setAudioUploading, setProgress: setAudioProgress };
       const urls = await uploadFiles(Array.from(files).slice(0, remaining), options);
       applyReferenceUrls(mediaType, urls, target, selectionAtStart);
     },
@@ -1862,7 +1864,7 @@ export default function VideoStudio({
   const handleEndImageFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > 100 * 1024 * 1024) {
       alert(copy.errors.imageExceeds10MB);
       return;
     }
@@ -2106,7 +2108,7 @@ export default function VideoStudio({
     const isExtendMode = currentModel?.requiresRequestId;
     const capabilities = getModelMediaCapabilities(currentModel);
     const requestSource = selectedVeoTool ? selectedVeoSource : generationSources[selectedFamily.id];
-    const trimmedPrompt = promptDisabled ? "" : prompt.trim();
+    const trimmedPrompt = promptDisabled ? "" : prompt;
     const workflowMedia = selectedWorkflowId
       ? activeWorkflowMediaDraft || {}
       : {
@@ -2198,6 +2200,7 @@ export default function VideoStudio({
           v2vParams.prompt = trimmedPrompt;
         }
         res = await processV2V(apiKey, v2vParams);
+        if (res?.queued) return;
         if (!res?.url) throw new Error(copy.errors.noVideoUrlReturned);
 
         const genId = res.request_id || res.id || Date.now().toString();
@@ -2236,6 +2239,7 @@ export default function VideoStudio({
         if (showEffect && selectedEffect) i2vParams.name = selectedEffect;
 
         res = await generateI2V(apiKey, i2vParams);
+        if (res?.queued) return;
         if (!res?.url) throw new Error(copy.errors.noVideoUrlReturned);
 
         const genId = res.request_id || res.id || Date.now().toString();
@@ -2286,6 +2290,7 @@ export default function VideoStudio({
         if (!grouped && !selectedVeoTool && selectedQuality) params.quality = selectedQuality;
 
         res = await generateVideo(apiKey, params);
+        if (res?.queued) return;
         if (!res?.url) throw new Error(copy.errors.noVideoUrlReturned);
 
         const genId = res.request_id || res.id || Date.now().toString();
@@ -2940,6 +2945,7 @@ export default function VideoStudio({
           )}
 
           {/* Bottom row: controls + generate */}
+          <NoraSummary params={{model:selectedModel,prompt,...modelParameterValues,aspect_ratio:selectedAr,duration:selectedDuration,resolution:selectedResolution,quality:selectedQuality,...buildReferenceParams(currentModelObj,{imageUrls:uploadedImageUrls,endImageUrl:uploadedEndImageUrl,videoUrls:uploadedVideoUrls,audioUrls:uploadedAudioUrls})}} />
           <PromptFooter>
             <PromptControls ref={dropdownRef}>
               {/* Model btn */}
@@ -3163,7 +3169,7 @@ export default function VideoStudio({
               )}
 
               {/* Aspect ratio btn */}
-              {showAr && (
+              {showAr && getCurrentAspectRatios(selectedModel).length > 0 && (
                 <div className="relative">
                   <button
                     type="button"
@@ -3279,7 +3285,7 @@ export default function VideoStudio({
                   copy={groupCopy}
                 />
               )}
-              {!groupedConfiguration && showDuration && (
+              {!groupedConfiguration && showDuration && getCurrentDurations(selectedModel).length > 0 && (
                 <div className="relative">
                   <button
                     type="button"
@@ -3397,7 +3403,7 @@ export default function VideoStudio({
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={generating || mediaUploading || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
+              disabled={noraReadOnly() || generating || mediaUploading || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
             >
               {generating ? (
                 <>
@@ -3408,7 +3414,7 @@ export default function VideoStudio({
                 </>
               ) : (
                 <>
-                  <span>{copy.controls.generate}</span>
+                  <span>В очередь</span>
                 </>
               )}
             </PromptAction>

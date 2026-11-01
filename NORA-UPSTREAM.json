@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/Anil-matcha/Open-Generative-AI.git",
+  "fork": "https://github.com/v-v-l/Open-Generative-AI.git",
+  "baseline": "84b29a55ff8bd536c7fdda5d80e2f120cac9d6e1",
+  "integration_branch": "nora",
+  "license": "MIT"
+}

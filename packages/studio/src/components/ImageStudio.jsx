@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { NoraSummary } from "@nora/ui";
+import { isReadOnly as noraReadOnly } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateImage, generateI2I, uploadFile } from "../muapi.js";
 import { formatErrorMessage } from "../utils/formatError.js";
@@ -13,6 +15,7 @@ import MobileGenerationActions, {
 import {
   t2iModels,
   getAspectRatiosForModel,
+  getModelById,
   getResolutionsForModel,
   getQualityFieldForModel,
   getAspectRatiosForI2IModel,
@@ -191,7 +194,7 @@ function UploadButton({ apiKey, maxImages, onSelect, onClear, initialUrls = [], 
   const processFiles = async (files) => {
     if (!files.length) return;
 
-    const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_IMAGE_SIZE = 100 * 1024 * 1024; // 100 MiB
     const tooLarge = files.filter((f) => f.size > MAX_IMAGE_SIZE);
     if (tooLarge.length > 0) {
       alert(
@@ -1132,7 +1135,7 @@ export default function ImageStudio({
   ]);
 
   const processDroppedImages = async (files) => {
-    const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_IMAGE_SIZE = 100 * 1024 * 1024; // 100 MiB
     const tooLarge = files.filter((f) => f.size > MAX_IMAGE_SIZE);
     if (tooLarge.length > 0) {
       alert(
@@ -1212,7 +1215,8 @@ export default function ImageStudio({
   const selectedModelDisplayName = selectedPickerEntry?.name || selectedFamily.name;
   const currentMode = imageMode ? "i2i" : "t2i";
   const selectedVariant = imageModelCatalog.variantById.get(selectedModelId);
-  const supplementalInputs = getSupplementalModelInputs(selectedVariant?.model);
+  const selectedNativeModel = selectedVariant?.model || (imageMode ? getI2IModelById(selectedModelId) : getModelById(selectedModelId));
+  const supplementalInputs = getSupplementalModelInputs(selectedNativeModel);
   const referenceVariant = getImageReferenceVariant(
     imageModelCatalog,
     selectedFamily,
@@ -1368,7 +1372,7 @@ export default function ImageStudio({
         return;
       }
     } else {
-      const imageCapability = getModelMediaCapabilities(selectedVariant?.model).image;
+      const imageCapability = getModelMediaCapabilities(selectedNativeModel).image;
       if (uploadedImageUrls.length > 0 && imageCapability.maxItems === 0) {
         alert(copy.errors.noImageReferenceSupport.replace("{name}", selectedModelDisplayName));
         return;
@@ -1390,7 +1394,7 @@ export default function ImageStudio({
             const genParams = {
               model: selectedModelId,
               ...buildSupplementalInputPayload(
-                selectedVariant?.model,
+                selectedNativeModel,
                 modelParameterValues,
               ),
               images_list: uploadedImageUrls,
@@ -1398,24 +1402,25 @@ export default function ImageStudio({
               aspect_ratio: selectedAr,
             };
             if (swapImageUrl) genParams.swap_url = swapImageUrl;
-            if (prompt.trim()) genParams.prompt = prompt.trim();
+            if (prompt.trim()) genParams.prompt = prompt;
             if (currentQualityField && selectedQuality) {
               genParams[currentQualityField] = selectedQuality;
             }
             if (showEffectBtn && selectedEffect) genParams.name = selectedEffect;
             return await generateI2I(apiKey, genParams);
           } else {
-            const referenceParams = buildReferenceParams(selectedVariant?.model, {
+            const referenceParams = buildReferenceParams(selectedNativeModel, {
               imageUrls: uploadedImageUrls,
             });
             const genParams = {
               model: selectedModelId,
               ...buildSupplementalInputPayload(
-                selectedVariant?.model,
+                selectedNativeModel,
                 modelParameterValues,
               ),
               ...referenceParams,
-              prompt: prompt.trim(),
+              images_list: uploadedImageUrls,
+              prompt,
               aspect_ratio: selectedAr,
             };
             if (currentQualityField && selectedQuality) {
@@ -1431,7 +1436,7 @@ export default function ImageStudio({
           const entry = {
             id: res.id || Math.random().toString(36).substring(7),
             url: res.url,
-            prompt: prompt.trim(),
+            prompt,
             model: selectedModelId,
             aspect_ratio: selectedAr,
             timestamp: new Date().toISOString(),
@@ -1440,7 +1445,7 @@ export default function ImageStudio({
           onGenerationComplete?.({
             url: res.url,
             model: selectedModelId,
-            prompt: prompt.trim(),
+            prompt,
             type: "image",
           });
         }
@@ -1675,6 +1680,7 @@ export default function ImageStudio({
           </div>
 
           {/* Bottom row: controls + generate */}
+          <NoraSummary params={{model:selectedModelId,prompt,...modelParameterValues,aspect_ratio:selectedAr,...(currentQualityField?{[currentQualityField]:selectedQuality}:{}),images_list:uploadedImageUrls}} />
           <PromptFooter>
             {/* Left controls */}
             <PromptControls ref={dropdownRef}>
@@ -1742,7 +1748,7 @@ export default function ImageStudio({
               />
 
               {/* Aspect ratio button */}
-              <div className="relative">
+              {currentAspectRatios.length > 0 && (<div className="relative">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1772,7 +1778,7 @@ export default function ImageStudio({
                     />
                   </PromptPopover>
                 )}
-              </div>
+              </div>)}
 
               {/* Quality/resolution button (represented as Diamond icon) */}
               {showQualityBtn && (
@@ -1887,7 +1893,7 @@ export default function ImageStudio({
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={generating}
+              disabled={generating || noraReadOnly()}
             >
               {generating ? (
                 <>
@@ -1896,7 +1902,7 @@ export default function ImageStudio({
                 </>
               ) : (
                 <>
-                  <span>{copy.promptBar.generateButton}</span>
+                  <span>В очередь</span>
                 </>
               )}
             </PromptAction>

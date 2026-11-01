@@ -5,7 +5,7 @@
     "addUpToImages": "Add up to {max} images",
     "singleSelectedTitle": "1 image selected — click to add more (up to {max})",
     "multiSelectedTitle": "{count} of {max} images selected — click to manage",
-    "tooLargeAlert": "The following images are too large (max 10MB): {names}",
+    "tooLargeAlert": "The following images are too large (max 100MB): {names}",
     "uploadFailedAlert": "Image upload failed: {message}",
     "headerTitle": "Reference Images",
     "selectUpTo": "Select up to {max} images",

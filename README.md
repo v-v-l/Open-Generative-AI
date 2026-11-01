@@ -1,3 +1,5 @@
+> **Nora integration fork:** our maintained branch is `nora`. See [Nora setup and updates](docs/NORA.md) for the image/video frontend, private execution backend, provider capabilities, queue and deployment. The upstream project documentation is preserved below; its MuAPI catalog is separate from the providers configured in Nora.
+
 # Open Generative AI — Unrestricted Open-Source Alternative to AI Video Platforms
 
 [![Powered by MuAPI](https://img.shields.io/badge/Powered%20by-MuAPI-6366f1?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNHYtNGgtMnYtMmg0djZoLTJ6bTAtOFY2aDJ2MmgtMnoiLz48L3N2Zz4=)](https://muapi.ai?utm_source=github&utm_medium=badge&utm_campaign=open-generative-ai)
