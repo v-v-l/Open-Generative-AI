@@ -125,6 +125,26 @@ Prompt wording, quality defaults and requested dimensions are not rewritten.
 Price remains visible in one compact row; detailed tariffs, queue/budget behavior
 and native guide caveats are under the closed “Детали” section.
 
+For OpenRouter video models, first/last-frame controls follow each model's public
+`supported_frame_images` catalog entry. Veo 3.1, Fast and Lite currently expose
+both frames; some other models expose only the first. These are frame constraints,
+not interchangeable subject/style references. “Generate audio” controls generated
+sound, not an uploaded audio reference. The current OpenRouter adapter does not
+expose arbitrary image/video/audio references or editing/continuation endpoints.
+Transport and validation are tested with mocked requests; this does not certify
+paid generation quality or account access for every listed model.
+
 The reference library additionally supports named sets with empty view slots and
 original uploads; these actions do not run any model. See its manual for storage
 and replacement behavior. Model generation still happens only in Image/Video Studio.
+
+### Collapsing the prompt composer
+
+Photo and Video Studio each have a **Свернуть** control. It hides the composer body
+without unmounting it; text, attached files, model parameters and in-progress uploads
+remain intact. The compact bar shows the model, reference count and prompt excerpt.
+Use **Развернуть** to restore the same draft on desktop or mobile; both controls work
+with keyboard Enter or Space and expose their expanded state to screen readers.
+Switching generation models preserves compatible references. References unsupported
+by the new model are excluded with a visible notice; Veo retains Start/End frames,
+while a start-only model retains only Start.

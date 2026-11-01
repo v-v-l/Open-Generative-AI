@@ -5,6 +5,13 @@ preserved separately in the original README below the fork notice.
 
 ## [Unreleased]
 
+### Added
+- Collapse/expand the photo and video prompt panel while retaining its draft, files and settings.
+
+### Fixed
+- Filter video references by the selected model capabilities and explain removal of incompatible attachments after model changes.
+- Added mocked transport checks for all three Veo variants and models with first-frame-only input.
+
 ## [Nora 0.4.0] - 2026-11-01
 
 - Added user-created reference sets with empty face/body/clothing/location view slots, persistent uploads and safe replacement retaining previous originals.

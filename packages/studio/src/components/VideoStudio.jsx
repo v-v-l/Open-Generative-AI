@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
-import { NoraSummary, NoraAttachments, noraReferenceInputs } from "@nora/ui";
+import { NoraSummary, NoraAttachments, NoraComposer, noraReferenceInputs } from "@nora/ui";
 import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateVideo, generateI2V, processV2V, uploadFile } from "../muapi.js";
@@ -84,7 +84,6 @@ import {
   PromptAspectRatioIcon,
   PromptAction,
   PromptChevronIcon,
-  PromptComposer,
   PromptControls,
   PromptFooter,
   PromptMenuItem,
@@ -1252,13 +1251,6 @@ export default function VideoStudio({
     [applyControlsForModel],
   );
 
-  const reconcileReferencesForModel = useCallback((model) => {
-    const capabilities = getModelMediaCapabilities(model);
-    setUploadedImageUrls((urls) => urls.slice(0, capabilities.image.maxItems));
-    setUploadedVideoUrls((urls) => urls.slice(0, capabilities.video.maxItems));
-    setUploadedAudioUrls((urls) => urls.slice(0, capabilities.audio.maxItems));
-    if (!capabilities.image.separateLastItem) setUploadedEndImageUrl(null);
-  }, []);
 
   const applyUserSelectedVariant = useCallback(
     (variant, mode, family, workflowId = null) => {
@@ -1287,15 +1279,15 @@ export default function VideoStudio({
             ),
           };
         });
-      } else {
-        reconcileReferencesForModel(variant.model);
       }
+      // NoraAttachments reconciles verified backend roles after selection.
+
       if (shouldDisableVideoPrompt(variant.model, mode)) {
         setPrompt("");
       }
       applySelectedVariant(variant, mode, family, workflowId);
     },
-    [applySelectedVariant, reconcileReferencesForModel],
+    [applySelectedVariant],
   );
 
   // ── Persistence: Load ────────────────────────────────────────────────────
@@ -1511,7 +1503,7 @@ export default function VideoStudio({
       const isCurrentVariant =
         resolvedTarget.variant.model.id === selectionRef.current.selectedModel;
       if (!isCurrentVariant) {
-        reconcileReferencesForModel(resolvedTarget.variant.model);
+        // NoraAttachments reconciles verified backend roles.
         applySelectedVariant(
           resolvedTarget.variant,
           resolvedTarget.mode,
@@ -1537,7 +1529,7 @@ export default function VideoStudio({
           : setUploadedAudioUrls;
       setter((current) => mergeReferenceUrls(current, validUrls, limit));
     },
-    [applySelectedVariant, reconcileReferencesForModel, resolveMediaTarget],
+    [applySelectedVariant, resolveMediaTarget],
   );
 
   const handleDrawReference = useCallback(
@@ -2684,7 +2676,7 @@ export default function VideoStudio({
       </div>
 
       {/* ── BOTTOM PROMPT BAR ── */}
-      <PromptComposer>
+      <NoraComposer kind="video" modelId={selectedModel} prompt={prompt} references={{imageUrls:uploadedImageUrls,endImageUrl:uploadedEndImageUrl,videoUrls:uploadedVideoUrls,audioUrls:uploadedAudioUrls}}>
           <div className="flex flex-col gap-3">
             <NoraAttachments modelId={selectedModel} imageUrls={uploadedImageUrls} endImageUrl={uploadedEndImageUrl} videoUrls={uploadedVideoUrls} audioUrls={uploadedAudioUrls} onChange={(role, urls) => {
               if (role === "start" || role === "image") setUploadedImageUrls(urls);
@@ -3230,7 +3222,7 @@ export default function VideoStudio({
               )}
             </PromptAction>
           </PromptFooter>
-      </PromptComposer>
+      </NoraComposer>
 
       {/* ── FULLSCREEN VIDEO MODAL ── */}
       {fullscreenUrl && (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { NoraSummary, NoraAttachments } from "@nora/ui";
+import { NoraSummary, NoraAttachments, NoraComposer } from "@nora/ui";
 import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateImage, generateI2I, uploadFile } from "../muapi.js";
@@ -48,7 +48,6 @@ import {
   PromptAspectRatioIcon,
   PromptAction,
   PromptChevronIcon,
-  PromptComposer,
   PromptControls,
   PromptFooter,
   PromptMenuItem,
@@ -1263,12 +1262,7 @@ export default function ImageStudio({
   }, []);
 
   const applyUserSelectedVariant = useCallback((variant, mode, family) => {
-    if (mode === "t2i") {
-      setUploadedImageUrls([]);
-    } else {
-      const maxImages = getMaxImagesForI2IModel(variant.model.id);
-      setUploadedImageUrls((urls) => urls.slice(0, maxImages));
-    }
+    // NoraAttachments reconciles verified backend roles after selection.
     setSwapImageUrl(null);
     applySelectedVariant(variant, mode, family);
   }, [applySelectedVariant]);
@@ -1620,7 +1614,7 @@ export default function ImageStudio({
       </div>
 
       {/* ── BOTTOM PROMPT BAR ── */}
-      <PromptComposer>
+      <NoraComposer kind="photo" modelId={selectedModelId} prompt={prompt} references={{imageUrls:uploadedImageUrls}}>
           {/* Top row: upload picker + textarea */}
           <div className="flex flex-col gap-3">
             <NoraAttachments modelId={selectedModelId} imageUrls={uploadedImageUrls} onChange={(_role, urls) => setUploadedImageUrls(urls)} />
@@ -1862,7 +1856,7 @@ export default function ImageStudio({
               )}
             </PromptAction>
           </PromptFooter>
-      </PromptComposer>
+      </NoraComposer>
 
       {/* ── FULLSCREEN IMAGE MODAL ── */}
       {fullscreenUrl && (

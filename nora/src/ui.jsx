@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { runtime, publish, request, refresh, descriptor } from "./runtime.js";
 import { buildJob, historyFor, hideHistory } from "./api.js";
 export { NoraAttachments } from "./attachments.jsx";
+export { NoraComposer } from "./composer.jsx";
 export { referenceInputs as noraReferenceInputs } from "./api.js";
 export function useRuntime() {
   const [, setTick] = useState(0);

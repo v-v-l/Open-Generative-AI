@@ -484,3 +484,82 @@ body {
     width: 164px;
   }
 }
+/* Native hidden keeps the mounted draft intact while the small restore bar remains reachable. */
+.nora-composer-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+.nora-composer-brief {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.nora-composer-brief[hidden] {
+  display: none;
+}
+.nora-composer-brief strong {
+  font-size: 11px;
+  color: #dedee5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nora-composer-brief span {
+  font-size: 10px;
+  color: #92929d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nora-composer-toggle {
+  border: 1px solid #ffffff20;
+  border-radius: 7px;
+  background: #ffffff06;
+  color: #c4c4cc;
+  font-size: 10px;
+  padding: 5px 10px;
+  min-height: 28px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.nora-composer-toggle:hover {
+  background: #ffffff12;
+  color: white;
+}
+.nora-composer-toggle:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: 3px;
+}
+.nora-composer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.nora-composer-body[hidden] {
+  display: none !important;
+}
+.nora-composer-panel {
+  gap: 6px !important;
+}
+.nora-composer-collapsed {
+  padding: 10px 14px !important;
+  border-radius: 18px !important;
+}
+@media (max-width: 540px) {
+  .nora-composer-toggle {
+    min-height: 36px;
+    padding: 7px 10px;
+  }
+  .nora-composer-head {
+    gap: 8px;
+  }
+  .nora-composer-brief strong {
+    font-size: 10px;
+  }
+}

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   descriptor,
   runtime,
@@ -19,6 +19,45 @@ export function NoraAttachments({
 }) {
   const [error, setError] = useState("");
   const m = descriptor(modelId);
+  const previousModel = useRef(modelId);
+  useEffect(() => {
+    if (!m) return;
+    const removed = [];
+    if (
+      previousModel.current !== modelId &&
+      (runtime.extraAssets[previousModel.current] || []).length
+    )
+      removed.push("Image");
+    previousModel.current = modelId;
+    const imageLimit = m.roles.start || m.roles.image || 0;
+    if (imageUrls.length > imageLimit) {
+      onChange(
+        m.roles.start ? "start" : "image",
+        imageUrls.slice(0, imageLimit),
+      );
+      removed.push("Image");
+    }
+    if (endImageUrl && !m.roles.end) {
+      onChange("end", []);
+      removed.push("End");
+    }
+    for (const [role, urls] of [
+      ["video", videoUrls],
+      ["audio", audioUrls],
+    ]) {
+      const max = m.roles[role] || 0;
+      if (urls.length > max) {
+        onChange(role, urls.slice(0, max));
+        removed.push(role === "video" ? "Video" : "Audio");
+      }
+    }
+    setError(
+      removed.length
+        ? "При смене модели несовместимые вложения исключены: " +
+            removed.join(", ")
+        : "",
+    );
+  }, [modelId]);
   if (!m) return null;
   const extra = (runtime.extraAssets[modelId] || []).filter(
     (asset) => asset.role === "image",

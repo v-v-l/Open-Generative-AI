@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runtime } from "../src/runtime.js";
-import { buildJob } from "../src/api.js";
+import { buildJob, referenceInputs } from "../src/api.js";
 import { modelFromDescriptor, installCatalog } from "../src/catalog.js";
 const image = "a".repeat(32),
   start = "b".repeat(32),
@@ -176,7 +176,72 @@ test("friendly OpenAI display names do not change request model IDs", () => {
   assert.equal(mapped.name, "OpenAI GPT Image 2.5 Sunburst");
   assert.equal(mapped.id, model.id);
   assert.match(mapped.provider_name, /2026-09-08/);
-  const alias=modelFromDescriptor({...model,id:"openai:gpt-image-2.5-sunburst",remote_model:"gpt-image-2.5-sunburst"},"t2i");
-  assert.equal(mapped.name,alias.name);
-  assert.notEqual(mapped.provider_name,alias.provider_name);
+  const alias = modelFromDescriptor(
+    {
+      ...model,
+      id: "openai:gpt-image-2.5-sunburst",
+      remote_model: "gpt-image-2.5-sunburst",
+    },
+    "t2i",
+  );
+  assert.equal(mapped.name, alias.name);
+  assert.notEqual(mapped.provider_name, alias.provider_name);
+});
+
+test("switching H3 media to Veo or a start-only model omits unsupported inputs and rejects stale raw aliases", () => {
+  const media = {
+    imageUrls: ["/media/" + start],
+    endImageUrl: "/media/" + end,
+    videoUrls: ["/media/" + video],
+    audioUrls: ["/media/" + audio],
+  };
+  const veo = {
+    ...h3,
+    id: "openrouter:veo-test",
+    roles: { start: 1, end: 1 },
+    provider: "openrouter",
+  };
+  const firstOnly = {
+    ...veo,
+    id: "openrouter:first-only",
+    roles: { start: 1 },
+  };
+  runtime.descriptors = [veo, firstOnly];
+  runtime.extraAssets = {};
+  const veoInputs = referenceInputs(veo.id, media),
+    firstInputs = referenceInputs(firstOnly.id, media);
+  assert.deepEqual(veoInputs, {
+    image_url: "/media/" + start,
+    last_image: "/media/" + end,
+  });
+  assert.deepEqual(firstInputs, { image_url: "/media/" + start });
+  assert.deepEqual(
+    buildJob({ model: veo.id, prompt: "Literal", ...veoInputs }).assets,
+    [
+      { id: start, role: "start" },
+      { id: end, role: "end" },
+    ],
+  );
+  assert.deepEqual(
+    buildJob({ model: firstOnly.id, prompt: "Literal", ...firstInputs }).assets,
+    [{ id: start, role: "start" }],
+  );
+  assert.throws(
+    () =>
+      buildJob({
+        model: veo.id,
+        prompt: "Literal",
+        video_url: "/media/" + video,
+      }),
+    /не поддерживает.*video/,
+  );
+  assert.throws(
+    () =>
+      buildJob({
+        model: firstOnly.id,
+        prompt: "Literal",
+        last_image: "/media/" + end,
+      }),
+    /не поддерживает.*end/,
+  );
 });

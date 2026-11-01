@@ -127,6 +127,44 @@ class CloudContracts(unittest.TestCase):
         self.assertIsNone(caught.exception.billing["actual_usd"])
         self.assertTrue((self.root / "cancel/cloud-accepted.json").exists())
 
+    def test_all_veo_variants_preserve_frame_pixels_and_reject_other_roles(self):
+        second = self.root / "last.png"
+        Image.new("RGB", (9, 7), "blue").save(second)
+        refs = [dict(self.asset, role="start"), {"id": "last", "role": "end", "path": str(second)}]
+        for index, slug in enumerate(cloud.VEO):
+            with self.subTest(model=slug):
+                job = dict(self.veo_job(), model="openrouter:" + slug)
+                with patch.object(cloud, "_request", return_value={"id": "done", "status": "completed"}) as request, patch.object(cloud, "_download_video", return_value=[{"path": str(self.root / "video.mp4"), "kind": "video"}]):
+                    cloud.run_job(job, self.root / f"veo-{index}", refs, self.events.append, lambda: False)
+                body = request.call_args.args[1]
+                self.assertEqual(body["model"], slug)
+                self.assertEqual(body["seed"], job["seed"])
+                self.assertFalse(body["generate_audio"])
+                for frame, asset in zip(body["frame_images"], refs):
+                    with Image.open(io.BytesIO(base64.b64decode(frame["image_url"]["url"].split(",", 1)[1]))) as sent, Image.open(asset["path"]) as original:
+                        self.assertEqual(sent.size, original.size)
+                        self.assertEqual(sent.convert("RGB").tobytes(), original.convert("RGB").tobytes())
+                for role in ("image", "video", "audio"):
+                    with self.assertRaisesRegex(ValueError, "Unsupported reference role"):
+                        cloud.validate_job(job, [dict(self.asset, role=role)])
+                with self.assertRaisesRegex(ValueError, "last frame requires a first"):
+                    cloud.validate_job(job, [refs[1]])
+
+    def test_frame_capabilities_control_other_video_model_validation(self):
+        for frames in ([], ["first_frame"], ["first_frame", "last_frame"]):
+            source = {"id": "test/video", "supported_durations": [5], "supported_resolutions": ["720p"], "supported_aspect_ratios": ["9:16"], "supported_frame_images": frames}
+            model = cloud._video_descriptor(source, "test")
+            job = {"model": model["id"], "kind": "video", "prompt": "literal", "duration": 5, "resolution": "720p", "aspect_ratio": "9:16"}
+            with self.subTest(frames=frames), patch.object(cloud, "catalog", return_value=[model]):
+                cloud.validate_job(job, [])
+                for role, native in (("start", "first_frame"), ("end", "last_frame")):
+                    refs = [dict(self.asset, role="start")] if role == "start" else [dict(self.asset, role="start"), dict(self.asset, role="end")]
+                    if native in frames:
+                        cloud.validate_job(job, refs)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "Unsupported reference role"):
+                            cloud.validate_job(job, refs)
+
     def test_http_error_saved_without_upstream_reference_body_or_secret(self):
         error = urllib.error.HTTPError(cloud.OPENAI + "/images/generations", 429, "rate limited", {}, io.BytesIO(b"test-secret-openai PRIVATE_REFERENCE_BASE64"))
         self.addCleanup(error.close)

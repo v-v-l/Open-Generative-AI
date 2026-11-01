@@ -7,20 +7,25 @@ const firstNonEmpty = (...values) =>
   );
 export function referenceInputs(modelId, media) {
   const m = descriptor(modelId);
-  if (m?.kind === "photo") return { images_list: media.imageUrls || [] };
+  if (m?.kind === "photo")
+    return { images_list: m.roles.image ? media.imageUrls || [] : [] };
   return {
     ...(m?.roles.start
       ? { image_url: media.imageUrls?.[0] }
-      : { images_list: media.imageUrls || [] }),
-    last_image: media.endImageUrl || undefined,
-    videos_list: media.videoUrls || [],
-    audios_list: media.audioUrls || [],
+      : { images_list: m?.roles.image ? media.imageUrls || [] : [] }),
+    ...(m?.roles.end ? { last_image: media.endImageUrl || undefined } : {}),
+    ...(m?.roles.video ? { videos_list: media.videoUrls || [] } : {}),
+    ...(m?.roles.audio ? { audios_list: media.audioUrls || [] } : {}),
   };
 }
 export function refsFor(params, m) {
   const refs = [];
   const append = (urls, role) => {
     for (const url of (Array.isArray(urls) ? urls : [urls]).filter(Boolean)) {
+      if (!m.roles[role])
+        throw Error(
+          `Модель не поддерживает референсы ${role}. Уберите несовместимые вложения.`,
+        );
       const id = url.split("/").pop();
       if (!/^[a-f0-9]{32}$/.test(id))
         throw Error(
@@ -55,7 +60,11 @@ export function refsFor(params, m) {
     append(firstNonEmpty(params.videos_list, params.video_url), "video");
     append(firstNonEmpty(params.audios_list, params.audio_url), "audio");
   }
-  for (const a of runtime.extraAssets[m.id] || [])
+  for (const a of runtime.extraAssets[m.id] || []) {
+    if (!m.roles[a.role])
+      throw Error(
+        `Модель не поддерживает референсы ${a.role}. Уберите несовместимые вложения.`,
+      );
     refs.push({
       id: a.id,
       role: a.role,
@@ -63,6 +72,7 @@ export function refsFor(params, m) {
         ? { include_audio: a.include_audio }
         : {}),
     });
+  }
   return refs;
 }
 export function buildJob(params) {
