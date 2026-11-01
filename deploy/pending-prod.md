@@ -188,3 +188,23 @@ work/studio-seed-sidebar-payloads.json, work/studio-public-queue-seed-verificati
 and corresponding desktop/mobile screenshots. No migration, secret or new service
 required. Updated generation journey for the sidebar and saved-seed behavior;
 service topology and data schema are unchanged.
+
+## Promoted — 2026-11-01: LoRA media selection and compact main menu
+
+Release `nora-v4e-lora-library`, source `29809f2`.
+
+- [x] Added free-append named LoRA collections in the reference library, mixed photo/video batch uploads, previews, original downloads and bounded mixed ZIP export. Video selection is explicitly excluded from PNG sheets. No training or inference actions added.
+- [x] Preserved existing reference sets, original bytes, review statuses and photo-slot behavior. Private manifest snapshot saved before backend activation.
+- [x] Moved branding, references, catalog refresh and logout into the existing menu/queue hamburger on desktop/mobile; main header retains studio tabs.
+- [x] Added nonsecret `NORA_FFPROBE_BIN` pointing to runtime/bin/nora-ffprobe. `provision-apps-ffprobe.sh` prepares signed Ubuntu packages by rootless download/extraction under runtime/tools/media-probe-v1, saves package SHA256 provenance, and configures the isolated wrapper. No system packages installed or new service required.
+- [x] Verified actual apps probe on synthetic1s96x128MP4. The temporary sample was removed; no synthetic records added to the user's library.
+- [x] Video originals stream authenticated206byte ranges; MIME/container/stream/budget validation is bounded. Upload caps: images40MiB, video100MiB; JSON reference body137MiB stays behind the existing140MB proxy limit.
+- [x] Full backend suite85 tests,4 PostgreSQL-only skipped; frontend check/typecheck/unit/build passed. Isolated library browser tests cover mixed uploads, reload, playback, exact MP4 SHA256 download, ZIP, partial failure/retry, read-only, mobile390 and existing8face slots.
+- [x] Menu browser tests cover one-row<=62px header, focus/Escape/backdrop, moved actions, queue behavior and mobile overflow.
+- [x] Queue was idle/paused at activation; safe backend helper and private candidate negative auth/Host/peer gate passed. Production public smoke confirmed compact menu, LoRA tab and free set dialog, no page errors; jobs10 and reference records28 unchanged. Queue remains paused. No paid checks performed.
+
+Evidence outside Git: work/studio-mainmenu-validation.json,
+work/reference-library-lora-desktop.png, work/reference-library-lora-mobile.png,
+work/studio-public-lora-menu-verification.json and matching public screenshots.
+No database migrations; existing portable manifest format extended for LoRA items
+and media metadata. User journey updated; service topology remains unchanged.
