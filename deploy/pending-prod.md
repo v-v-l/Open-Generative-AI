@@ -169,3 +169,22 @@ work/studio-public-composer-verification.json and matching screenshots.
 No migrations, secrets, infrastructure or route changes. Existing diagrams remain
 valid: this update changes composer presentation and attachment reconciliation,
 not the service topology, queue schema or generation journey.
+
+## Promoted — 2026-11-01: random seed controls and queue sidebar
+
+Release `nora-v4d-seed-queue`, source `3d0ffb9`.
+
+- [x] Added explicit random/fixed seed controls only for supported models; fixed zero and persisted manual seeds remain valid. The queue shows supported saved seeds and retry retains them.
+- [x] Moved queue controls/history into a hamburger-triggered modal sidebar with Escape, backdrop, close/focus restoration and keyboard focus containment.
+- [x] Price estimates normalize random seed placeholders in a separate copy without selecting or altering the eventual stored seed.
+- [x] Documented endpoint-specific model qualification: catalog/schema, mocked transport, then explicitly authorized paid checks of the actual modes needed. No automatic paid verification added.
+- [x] Full backend suite:80 tests,4 PostgreSQL-only skipped. Frontend check/typecheck/unit/build and isolated actual-form browser tests passed.
+- [x] Waited for existing production generation to finish. Paused only after no unfinished jobs remained, then safe backend activation rechecked the queue before restart. Existing10 jobs preserved; queue remains paused.
+- [x] Private candidate negative authentication/Host/peer gate passed and frontend activated.
+- [x] Public smoke confirmed random default, fixed zero selection, sidebar Escape/focus restoration, mobile no-overflow, no page errors, jobs10 before/after and zero paid test calls.
+
+Evidence outside Git: work/studio-seed-sidebar-validation.json,
+work/studio-seed-sidebar-payloads.json, work/studio-public-queue-seed-verification.json
+and corresponding desktop/mobile screenshots. No migration, secret or new service
+required. Updated generation journey for the sidebar and saved-seed behavior;
+service topology and data schema are unchanged.
