@@ -225,3 +225,21 @@ Evidence outside Git: work/studio-parameters-validation.json,
 work/studio-public-parameter-modal-verification.json and desktop/mobile screenshots.
 User journey documents draft commit/discard behavior. No migration or infrastructure
 change required.
+
+## Promoted — 2026-11-01: transport recovery, safe cloud diagnostics and right menu
+
+Release `nora-v4g-transport-errors`, source `dbb1b65`.
+
+- [x] Qwen incident traced: Appsjob b4ab0fcd67f04dfebfc981d86a0b1776 submittedexecutorID76812e76ca5248aeac056d4ae49f7a3e at20:41:36UTC;45srequesttimeout occurred before local source files/acceptance at20:42:30. The existing inference finished successfully at20:44:25. No inference exception or duplicate recovery generation occurred.
+- [x] Restored the existing result to its original failed job with seed52363425, verified768x1024PNG/SHA256, added a private executor-recovery.json audit retaining the former timeout, and marked the job completed. Local backup preserved under outputs/studio-recovery/b4ab0fcd67f04dfebfc981d86a0b1776/.
+- [x] Qwen transfer timeout now120s; lost acknowledgements/status reads reconcile by existing opaque ID with GET only, under bounded deadlines, never a second submission. Explicit HTTP rejection is not retried. Tests cover late acceptance404, lost acknowledgement/status response and exactly one POST.
+- [x] Sunburst400incident3ff38109e6774a7c9dc0979d3494d581 has no recoverable original provider error body or request ID: old handler discarded them. Three PNG references and selected quality/size do not establish a documented limit violation. No policy cause asserted and no paid reproduction attempted.
+- [x] Future cloud HTTP failures capture bounded64KiBJSON-derived message/code/type/parameter/requestID, redact credentials/prompts/URLs/paths/inline or encoded data, and expose the sanitized reason. Raw upstream bodies are not saved; automatic retries remain off.
+- [x] Hamburger moved to the right edge beside the right-hand drawer; desktop1440 and mobile390/320 layouts/focus checked. Frontend check/typecheck/build passed.
+- [x] Full backend suite90 tests total,4 isolated PostgreSQL tests skipped. Safe paused/idle backend activation and private candidate negative auth/Host/peer gate passed; no unfinished job interrupted.
+- [x] Public smoke downloaded recovered image with exact SHA256, confirmed completed status and original seed, right trigger gaps14px desktop/10px mobile, no page errors,12jobs retained, queue paused and zero paid test calls.
+
+Evidence outside Git: work/studio-public-transport-recovery-verification.json,
+work/studio-header-right-browser.js and desktop/mobile screenshots. Private runtime
+audit remains beside the recovered job. No migrations, new secrets or new services;
+transport topology and data schema are unchanged.
