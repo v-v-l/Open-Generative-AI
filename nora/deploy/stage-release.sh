@@ -12,5 +12,5 @@ tar -C "$bundle" -cf - . | ssh \
   -i "${MEDIA_STUDIO_SSH_KEY:-/home/victor/.ssh/bbright_codex_ed25519}" \
   -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
   "${MEDIA_STUDIO_SSH_TARGET:-victor@apps}" \
-  "set -eu; umask 077; mkdir -p /home/victor/apps/media-studio/releases; test ! -e /home/victor/apps/media-studio/releases/$release_id; mkdir /home/victor/apps/media-studio/releases/$release_id; tar -xf - -C /home/victor/apps/media-studio/releases/$release_id"
+  "set -eu; umask 077; mkdir -p /home/victor/apps/media-studio/releases; chmod 700 /home/victor/apps/media-studio/releases; test ! -e /home/victor/apps/media-studio/releases/$release_id; mkdir /home/victor/apps/media-studio/releases/$release_id; tar -xpf - -C /home/victor/apps/media-studio/releases/$release_id; chmod 700 /home/victor/apps/media-studio/releases/$release_id"
 printf 'Staged release %s on apps; no services started and gateway unchanged.\n' "$release_id"

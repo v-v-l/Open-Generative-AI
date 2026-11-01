@@ -28,6 +28,8 @@ else:raise SystemExit('Unsafe public backend: loopback Host bypass remains enabl
 print('Release checksum and tunnel authentication guards verified')
 PY
 docker compose -p nora-media -f "$release/compose.yml" config --quiet
+# Validate the actual mounted files with exactly the service identity/capabilities.
+docker compose -p nora-media -f "$release/compose.yml" run --rm --no-deps --entrypoint caddy frontend validate --config /etc/caddy/Caddyfile --adapter caddyfile
 docker compose -p nora-media -f "$release/compose.yml" up -d
 printf 'Apps frontend activated from reviewed release %s; gateway unchanged.\n' "$1"
 REMOTE
