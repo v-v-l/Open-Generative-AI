@@ -1,87 +1,119 @@
-# Selected Open Generative AI frontend + private Nora backend
+# Nora Media deployment
 
-Canonical deployment sources live once in this fork at `nora/deploy`. The workspace path `deploy/media-studio/open-generative-ai` and old bridge launcher are compatibility symlinks. Set `NORA_PROJECT_ROOT` when using this fork against a different external runtime workspace.
+Canonical code and deployment sources live in this fork. Runtime state, credentials,
+Python/Node installations and generated media stay outside releases.
 
-This is the current deployment candidate for the selected `Anil-matcha/Open-Generative-AI` fork. Earlier `../open-higgsfield/` and standalone Directcut candidates are superseded and were never deployed.
-
-## Concrete topology
+## Target topology
 
 ```text
-Browser HTTPS media.bp-flow.com
-  → gateway Caddy (192.168.100.10; public TLS and noindex)
-  → apps Caddy (192.168.100.70:36443; accepts gateway only)
-      → static frontend /srv/open-generative-ai
-      → authenticated API/media via apps 127.0.0.1:36442
-          → private SSH reverse tunnel
-          → laptop 127.0.0.1:36440 canonical Nora backend
-              → local Qwen or existing SimplePod H3 worker/cloud adapters
+Browser → HTTPS media.bp-flow.com → gateway Caddy
+  → apps Caddy 192.168.100.70:36443 (gateway only)
+    → immutable authenticated frontend
+    → apps loopback 127.0.0.1:36442: API, queue, cloud and H3 controller
+      → databases 192.168.100.75:5466: nora_media_prod PostgreSQL
+      → apps runtime: uploads and generated files
+      → OpenAI / OpenRouter directly
+      → SimplePod H3 over its existing SSH/provider API
+      → apps loopback 36447 → private SSH tunnel → workstation Qwen executor 36446
 ```
 
-The built frontend lives on apps. All model execution, references, queue data, provider credentials and worker credentials remain on the laptop. Apps stores only the frontend build and proxy configuration. There is no public ComfyUI endpoint and no GPU/model installation on apps.
+Only Qwen depends on the workstation. Its availability is checked independently;
+cloud/H3 and queue/history remain usable when that executor disconnects. No model
+weights or GPU inference are installed on apps. Deployment status and evidence
+belong in `../../deploy/pending-prod.md`; the diagram alone is not deployment proof.
 
-**The laptop must be online and the tunnel connected.** If it sleeps or disconnects, authentication and API/media requests fail closed. This design does not provide an independent cloud execution worker while the laptop is offline.
+## Apps runtime
 
-## Files and verified paths
+- Base: `/home/victor/apps/media-studio`.
+- Immutable bundles: `releases/RELEASE_ID`; `current` selects backend source.
+- Native service: `nora-media-apps-backend.service`, user `victor`, enabled with
+  `loginctl enable-linger`. Native systemd preserves the existing independent H3
+  budget timer without granting a container the Docker socket or host system bus.
+- Python environment: `runtime/venv`; install `backend/requirements.txt`.
+- Node dependencies: `runtime/tools/simplepod`; install the reviewed runtime lockfile.
+- `runtime/backend.env` (0600): DATABASE_URL, public authentication and Qwen tunnel
+  credentials. `runtime/.env` (0600): only the used provider keys.
+- `runtime/outputs/generation-studio`: media files; PostgreSQL owns queue metadata.
+- `runtime/work/simplepod/worker.json`: saved rental identity; SSH key and verified
+  host keys in `runtime/ssh`. Never include these files in release bundles.
 
-- Frontend build: `/home/victor/Projects/Nora/apps/open-generative-ai/nora/dist` (confirm successful build before activation).
-- Canonical backend: `scripts/generation_studio/server.py`, same persistent queue `outputs/generation-studio`.
-- Local public-auth environment: `work/generation-studio/public-auth.env`, mode 0600.
-- Initial password: `work/media-studio-login.txt`, mode 0600. Never copy it to apps or print its contents in tool output.
-- Tunnel launcher: `scripts/start-media-studio-bridge.sh`; apps reverse listener is loopback-only, port 36442.
-- Apps private frontend listener: 192.168.100.70:36443; previously checked free.
-- Gateway candidate: `Gateway.Caddyfile.fragment`; merge into the existing configuration after review rather than replacing other sites.
+Production must not enable `--allow-loopback-local`: apps-local callers can forge a
+loopback Host. The public Host and authentication guards apply on loopback too.
+Sessions are Secure/HttpOnly/SameSite=Strict; static authentication runs before file
+serving, and API/media require login. Backend restart requires logging in again.
 
-The backend authenticates every public-host request, including media. Apps verifies static access through `/api/auth/check`; anonymous static requests redirect to the backend login page. Session cookies are Secure, HttpOnly, SameSite=Strict, signed, revocable, and expire after 12 hours. Apps forwards the fixed public Host. The backend ignores forwarded host/protocol/client-IP headers.
+## Database
 
-**Production does not enable `--allow-loopback-local`.** An apps-local process could otherwise send a forged loopback Host through the SSH tunnel. Public production accepts only the configured public Host and requires authentication. Use the public HTTPS domain, or a separate read-only local preview with its own temp queue.
+`databases/compose.yml` provisions only `pg_nora_media_prod`, its own persistent
+volume, LAN port 5466 and dedicated non-superuser `nora_media`. Its pg_hba allows
+application connections only from apps LAN address. Passwords are generated outside
+Git. Check live container/listener bindings before allocating a port on another
+installation. The initial role script runs only on an empty volume.
 
-Canonical backend source is versioned once at `apps/open-generative-ai/nora/backend`; `scripts/generation_studio` is a compatibility symlink. Set `NORA_PROJECT_ROOT=/home/victor/Projects/Nora` so runtime settings, credentials, outputs and caches stay outside the fork. The service and local launcher set this explicitly. Canonical Python tests live in `nora/backend_tests`; old root test paths are compatibility symlinks.
+Both VMs currently lack a Docker Loki plugin. The DB uses bounded json-file logs;
+the native backend uses journald. Installing shared observability infrastructure is
+not part of this migration. Back up both the PostgreSQL database and apps media
+files; neither is a substitute for the other. No new backup schedule is implied.
 
-## Preparation and review sequence
+A direct PostgreSQL session holds a database advisory lock for the entire controller
+lifetime; transaction-pooling proxies are unsupported. Another controller cannot
+recover or dispatch the same queue. Lost connections never reconnect silently.
+Restarts pause the queue and mark running jobs interrupted; no paid call is retried.
 
-1. Build the selected fork's isolated `nora` frontend with root base URLs. The upstream MuAPI provider routes are not deployed.
-2. Run `python3 tests/test_generation_studio.py` and `python3 tests/test_generation_studio_auth.py`. These use fake engines and never generate media.
-3. Run `deploy/media-studio/open-generative-ai/prepare-release.sh` to make a local immutable bundle under `work/media-studio-deploy/releases/`. The bundle contains only static build/proxy files and a checksum manifest.
-4. Review the bundle and Caddy candidates. `caddy adapt --config ... --adapter caddyfile` validates syntax without starting a listener.
-5. Inspect canonical `/api/state`: `queue_paused` must be true, `active_job_id` null, and no running generation before any backend restart. Do not start another server against the same DB; the ownership lock rejects it.
-6. After parent review, stage the chosen release with `stage-release.sh RELEASE_ID`. This uploads only; it does not start Docker or change the gateway.
-7. Activate the reviewed laptop backend and reverse-tunnel user units, preserving the existing queue, worker tooling and independent GPU pause timer. Do not enable two backend units on the same port/DB.
-8. On apps, use the staged release's Compose file with a stable project name (`docker compose -p nora-media -f .../compose.yml up -d`) only after review. This Caddy container uses host networking and binds only the chosen LAN address/port.
-9. Merge and validate the gateway site fragment, then reload Caddy only after parent review.
-10. Verify anonymous API/media protection, login/logout, frontend loading, model flags, paused queue, and a read-only provider catalog refresh. No paid inference is part of deployment validation.
+## Migration and cutover
 
-For an isolated local source preview, use a separate temp queue and port with `--read-only --web-root .../nora/dist --root /tmp/nora-source-preview --port 36444`. This cannot enqueue jobs or start/pause the real queue.
+1. Run backend tests (with NORA_TEST_DATABASE_URL pointing ONLY to an isolated
+   disposable database for live integration tests), frontend checks/tests/build.
+2. Check the existing queue is paused with no running job. Stop the old backend
+   before copying an offline SQLite snapshot; preserve the original for rollback.
+3. Copy the registered uploads/jobs to apps runtime and retain the offline snapshot.
+4. Load DATABASE_URL without printing credentials, then run the reviewed
+   `backend/import_sqlite.py --source-root SNAPSHOT --original-root OLD_STORAGE_ROOT
+   --target-root NEW_STORAGE_ROOT`. Import refuses a nonempty target, validates
+   copied files, preserves IDs/order, and commits counts/import marker atomically.
+5. `prepare-release.sh` creates a checksum bundle of backend source, frontend and
+   proxy configuration. `stage-release.sh RELEASE_ID` uploads without activating.
+6. Install requirements/runtime dependencies and the apps user service. Select the
+   reviewed `current` release. Stop the former full-application reverse tunnel
+   before starting apps backend on the same apps loopback port 36442.
+7. Verify backend Host/auth guards; run `verify-private-candidate.sh RELEASE_ID`.
+   `activate-apps-release.sh RELEASE_ID` requires its matching negative-gate receipt.
+   The existing gateway route does not change and must not be appended again.
+8. Verify the public UI, login/logout, protected assets, migrated media, paused
+   queue and model availability. Stop/disable the old workstation backend and full
+   app tunnel. Exercise Qwen tunnel disconnection/reconnection without inference.
 
-## Rollback and resource behavior
+The old `activate-laptop.sh` and full-app bridge units are retained only for the
+previous topology/rollback. They are not part of apps deployment. Qwen now has its
+own executor and tunnel, with separate ports and credentials.
 
-Keep the previous frontend release and original gateway file backup. Roll back apps by selecting its previous immutable release; restore only the added gateway site block if necessary. Stopping the tunnel removes its reverse listener. Queue restart marks in-flight jobs interrupted and pauses the queue; it never automatically repeats a paid call.
+## Updates and rollback
 
-Stopping a tunnel does not cancel an inference already owned by the laptop backend. Check the canonical queue and the existing worker's independent pause timer before shutting down the backend. The deployment does not alter GPU pause rules, model choices, seed settings or inference prompts.
+Fetch/merge upstream through the fork's `scripts/nora-update.py`; it uses an isolated
+worktree and never promotes automatically. Build/test a new immutable release.
+Pause/drain the queue before switching `current` and restarting the apps backend;
+then verify and activate the frontend release. Runtime credentials, media, database
+and worker state are not overwritten. Future schema changes need explicit compatible
+migrations before source promotion.
 
-Provider pricing estimates remain estimates. An explicit `max_cost_usd` guard rejects submission when no reliable cost quote exists. Unknown charges stay unknown; cancellation after acceptance does not imply a free request. No new daily spending limit is claimed.
+Keep the previous release and pre-migration SQLite/media snapshot. Before any
+rollback check for cloud submissions, remote Comfy work and the independent GPU
+pause timer; stopping a web process does not cancel accepted provider work. After
+new PostgreSQL writes, restoring old SQLite would discard those changes: reconcile
+state explicitly rather than blindly restarting the old service.
 
-## Reviewed activation scripts
+## Proxy deployment details
 
-These scripts are prepared, not automatically executed by build or staging:
+Caddy uses explicit `route` ordering: deny wrong peer/Host before handlers, authenticate
+before static rewrite/serving, and `redir * /login 302`. Syntax checks alone do not
+prove access control. The private candidate gate checks real anonymous HTML/JS
+redirects, API/media 401, wrong-Host/peer 403, then removes only its owned container ID.
 
-- `activate-laptop.sh`: refuses an active/unpaused queue, installs the reviewed user units, changes the idle canonical backend once, and starts the application-only SSH tunnel. On startup failure it requests restoration of the original backend unit. It never submits a model job.
-- `activate-apps-release.sh RELEASE_ID`: verifies the staged checksum manifest, checks that the public backend requires login and rejects forged loopback Hosts through the tunnel, then starts the reviewed static Caddy release. It does not alter gateway configuration.
-- `activate-gateway.sh --apply RELEASE_ID`: verifies apps authentication first, locks gateway changes, backs up the existing complete Caddyfile, appends only the media site block, validates a candidate, checks no concurrent configuration change occurred, atomically replaces the file and reloads Caddy. A reload failure restores the original file.
+The Caddy image requires NET_BIND_SERVICE in its bounding capability set even on a
+high port; dropping ALL alone prevents execution. Keep other capabilities dropped
+and no-new-privileges. Stage with `tar -xpf` to preserve readable mounted file modes;
+releases and their parent remain 0700. Docker commands inside SSH-streamed scripts
+must use `</dev/null` so they cannot consume subsequent shell commands.
 
-Activation order after parent review is laptop → apps release → gateway. Apps Docker permission, Compose availability, gateway Caddy's reload action and the private listener ports were checked read-only. The initial password is never passed to apps; gateway and apps do not receive provider keys.
-
-Startup intent is recorded before laptop activation. The original backend was verified as a transient systemd-run unit, so it currently has no persistent reboot enablement. Successful activation enables the new backend and bridge user units; a failure restores previous enablement and can recreate the original collected transient launch. No enablement is changed merely by preparing these scripts.
-
-Manual catalog refresh returns 409 while jobs are queued or running. Finish or cancel those jobs first; this prevents changing the endpoint/pricing catalog underneath an already queued job.
-
-The official `caddy:2.11.2-alpine` binary carries the file capability `cap_net_bind_service=ep`. Dropping every bounding capability prevents Linux from executing that binary at all (`operation not permitted`), even though this deployment listens on a high port. The selected Compose configuration therefore drops all capabilities and adds back only `NET_BIND_SERVICE`, while retaining `no-new-privileges`. This requirement was confirmed with two network-isolated image probes: dropping all capabilities failed; adding only this capability successfully ran `caddy version`. No model/provider traffic was used in that test.
-
-Staging extracts with `tar -xpf` to preserve reviewed static/config file modes. With `umask 077`, ordinary extraction changes 0644/0755 files to owner-only modes, which a capability-restricted container cannot read when host ownership differs. After extraction the release directory is explicitly reset to 0700 (the archive's `.` entry can otherwise change it), and the releases parent stays private. Only static build/proxy content is mounted. Apps activation now runs `docker compose ... run --rm --no-deps --entrypoint caddy frontend validate ...` against the actual read-only mounts and service capabilities before starting the listener; a permission or configuration error therefore fails before `up`.
-
-Docker commands inside the SSH-streamed activation shell receive `/dev/null` as stdin. Compose run otherwise keeps stdin open and can consume the remaining remote shell commands, making validation appear successful while skipping activation. This transport isolation does not change the reviewed image, capabilities, or immutable release contents.
-
-The apps Caddyfile uses an explicit outer `route` so wrong-peer and wrong-Host denies run before backend/static handlers. Its inner static `route` explicitly authenticates before filesystem rewrites and serving. The redirect is written `redir * /login 302`: without the `*`, Caddy can parse `/login` as a path matcher and `302` as the target, allowing an unmatched response handler to fall through. Syntax validation alone did not prove these semantics.
-
-Before activating a new proxy release, run `verify-private-candidate.sh RELEASE_ID [36446]`. It verifies checksums, uses the same Compose image/capabilities/read-only mounts, and changes only the candidate listener port. Real requests from gateway must show anonymous API/media 401, anonymous HTML and a real bundled JS asset 302 to `/login`, and wrong-Host 403. Requests originating on apps itself must receive wrong-peer 403. The helper saves nonsecret results under the external runtime's `work/media-studio-deploy` and removes the candidate container on exit. It never submits a model request. Existing gateway routing is retained when replacing only an apps proxy release; do not append the site block again.
-
-`activate-apps-release.sh RELEASE_ID` enforces the private negative gate: it accepts only a successful receipt matching that immutable release's manifest and proxy hashes, otherwise it automatically runs `verify-private-candidate.sh RELEASE_ID` and verifies the new receipt before activation. A receipt cannot silently authorize another release or proxy configuration. Candidate runs use unique names/directories, and cleanup removes only the full container ID returned by the successful start command; a failed Docker start cannot cause deletion of an unrelated same-name container.
+Deployment validation never submits paid inference. Estimates remain estimates;
+unknown charges stay unknown, and explicit max_cost_usd requires a reliable quote.

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
 import { NoraSummary } from "@nora/ui";
-import { isReadOnly as noraReadOnly } from "@nora/runtime";
+import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateVideo, generateI2V, processV2V, uploadFile } from "../muapi.js";
 import { formatErrorMessage } from "../utils/formatError.js";
@@ -3403,7 +3403,7 @@ export default function VideoStudio({
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={noraReadOnly() || generating || mediaUploading || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
+              disabled={noraReadOnly() || noraModelUnavailable(selectedModel) || generating || mediaUploading || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
             >
               {generating ? (
                 <>

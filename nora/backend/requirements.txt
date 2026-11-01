@@ -1,2 +1,3 @@
 # Standard-library server and adapters; Pillow normalizes raster references/outputs.
 Pillow==13.0.0
+psycopg[binary]>=3.2.10,<4

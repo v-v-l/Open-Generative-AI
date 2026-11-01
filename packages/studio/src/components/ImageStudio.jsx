@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NoraSummary } from "@nora/ui";
-import { isReadOnly as noraReadOnly } from "@nora/runtime";
+import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateImage, generateI2I, uploadFile } from "../muapi.js";
 import { formatErrorMessage } from "../utils/formatError.js";
@@ -1893,7 +1893,7 @@ export default function ImageStudio({
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={generating || noraReadOnly()}
+              disabled={generating || noraReadOnly() || noraModelUnavailable(selectedModelId)}
             >
               {generating ? (
                 <>

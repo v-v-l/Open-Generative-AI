@@ -1,0 +1,19 @@
+[Unit]
+Description=Nora Media API and generation queue (apps)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/victor/apps/media-studio/runtime
+Environment=NORA_PROJECT_ROOT=/home/victor/apps/media-studio/runtime
+EnvironmentFile=/home/victor/apps/media-studio/runtime/backend.env
+ExecStart=/home/victor/apps/media-studio/runtime/venv/bin/python /home/victor/apps/media-studio/current/backend/server.py --port 36442 --public-origin https://media.bp-flow.com --root /home/victor/apps/media-studio/runtime/outputs/generation-studio --web-root /home/victor/apps/media-studio/current/dist
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

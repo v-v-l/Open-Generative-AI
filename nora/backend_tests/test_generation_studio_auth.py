@@ -23,7 +23,7 @@ class PublicAuthTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         server.engine = lambda: types.SimpleNamespace(capabilities=lambda:{'test':True})
-        self.studio = server.Studio(self.temp.name)
+        self.studio = server.Studio(self.temp.name, database_url="")
         self.http = server.ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
         self.http.studio = self.studio
         self.http.auth = server.Authentication('https://media.bp-flow.com',dict(self.environment))

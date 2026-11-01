@@ -25,7 +25,9 @@ TEMPLATES = Path(__file__).resolve().parent / "templates"
 H3_TEMPLATE = TEMPLATES / "h3-ref2va.json"
 QWEN_TEMPLATE = TEMPLATES / "qwen-photo.json"
 PHOTO_LORAS = ("Alice_Qwen_v1_49images.safetensors", "Alice_Qwen_v2_70images.safetensors")
+REFERENCE_LIMITS = {"photo": {"image": 10}, "video": {"start": 1, "end": 1, "image": 9, "video": 3, "audio": 3}}
 _CLOUD_MODULE = None
+_QWEN_MODULE = None
 
 
 def _cloud():
@@ -41,18 +43,39 @@ def _is_cloud(job):
     return job.get("model") not in (None, "", "qwen-local", "h3-simplepod")
 
 
+def _qwen_executor():
+    global _QWEN_MODULE
+    if _QWEN_MODULE is None:
+        spec = importlib.util.spec_from_file_location("nora_qwen_executor", Path(__file__).with_name("qwen_executor.py"))
+        _QWEN_MODULE = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_QWEN_MODULE)
+    return _QWEN_MODULE
+
+
+def job_readiness(job):
+    """Scheduler readiness; deliberately separate from pure input validation."""
+    if not _is_cloud(job) and job.get("kind") == "photo" and os.environ.get("NORA_QWEN_EXECUTOR_URL"):
+        value = _qwen_executor().health()
+        return {"available": value["available"], "reason": value["reason"]}
+    if not _is_cloud(job) and job.get("kind") == "photo":
+        configured = QWEN_TEMPLATE.is_file() and Path("/home/victor/Nora/runtime/comfy-photos").is_dir()
+        return {"available": configured, "reason": "Local Qwen runtime is configured" if configured else "Private Qwen executor is not configured on this server"}
+    return {"available": True, "reason": "Execution backend is configured"}
+
+
 def capabilities():
     result = {
         "photo": {"backend": "local-comfy", "url": PHOTO_URL,
-                  "model": "Qwen Image 2.1 BF16", "roles": {"image": 10},
+                  "model": "Qwen Image 2.1 BF16", "roles": dict(REFERENCE_LIMITS["photo"]),
                   "text_only": True, "lora_names": list(PHOTO_LORAS),
                   "default_lora": PHOTO_LORAS[1], "default_steps": 25,
                   "default_width": 768, "default_height": 1024,
                   "dimension_step": 32, "dimension_min": 256, "dimension_max": 1536,
+                  "max_minutes_max": 30,
                   "prompt_tags": "<image1> … <image10>",
                   "note": "Native node exposes 16 slots; studio caps at the model's documented 10. References and requested output size are separate; no automatic crop or prompt rewrite."},
         "video": {"backend": "simplepod", "model": "MiniMax H3 Singularity Ref2VA INT8",
-                  "roles": {"start": 1, "end": 1, "image": 9, "video": 3, "audio": 3},
+                  "roles": dict(REFERENCE_LIMITS["video"]),
                   "max_assets": 12, "text_only": True, "default_steps": 25,
                   "default_width": 704, "default_height": 960,
                   "dimension_step": 32, "dimension_min": 256, "dimension_max": 1536,
@@ -68,7 +91,11 @@ def capabilities():
                   "note": "Image references and frame-0 guides tested. End guides, mixed video/audio references and native generated audio are wired from installed source but need visual/audio review. Bracket camera commands pass through verbatim; no special parser is claimed."},
     }
     photo_available = QWEN_TEMPLATE.is_file() and Path("/home/victor/Nora/runtime/comfy-photos").is_dir()
-    worker_state = ROOT / "work/simplepod/worker.json"
+    qwen_health = None
+    if os.environ.get("NORA_QWEN_EXECUTOR_URL"):
+        qwen_health = _qwen_executor().health()
+        photo_available = qwen_health["available"]
+    worker_state = Path(os.environ.get("NORA_SIMPLEPOD_STATE", str(ROOT / "work/simplepod/worker.json")))
     video_available = H3_TEMPLATE.is_file() and worker_state.is_file()
     if video_available:
         try:
@@ -77,9 +104,14 @@ def capabilities():
             video_available = False
     result["photo"]["available"] = photo_available
     result["video"]["available"] = video_available
+    photo_reason = qwen_health["reason"] if qwen_health else "Local Qwen runtime is configured" if photo_available else "Local Qwen runtime is not configured on this server"
+    result["photo"]["availability_reason"] = photo_reason
+    result["executors"] = {"qwen": qwen_health or {"configured": photo_available, "available": photo_available,
+                                                 "status": "local_runtime" if photo_available else "not_configured", "reason": photo_reason}}
     result["models"] = [{"id": "qwen-local", "provider": "local", "kind": "photo", "label": "Qwen 2.1 · local",
                          "roles": result["photo"]["roles"], "settings": {}, "credential_configured": photo_available,
-                         "available": photo_available, "availability": "runtime_configured_not_health_checked" if photo_available else "not_configured_on_this_host"},
+                         "available": photo_available, "availability_reason": photo_reason,
+                         "availability": "executor_ready" if qwen_health and photo_available else "executor_offline" if qwen_health else "runtime_configured_not_health_checked" if photo_available else "not_configured_on_this_host"},
                         {"id": "h3-simplepod", "provider": "simplepod", "kind": "video", "label": "MiniMax H3 · SimplePod",
                          "roles": result["video"]["roles"], "settings": {}, "credential_configured": video_available,
                          "available": video_available, "availability": "worker_configured_not_health_checked" if video_available else "not_configured_on_this_host"}] + _cloud().catalog()
@@ -134,7 +166,7 @@ def validate_job(job, assets):
             raise ValueError(f"{key} must be divisible by 32")
     _integer(job, "seed", 1, 0, 2**63-1)
     _integer(job, "steps", 25, 1, 60)
-    _integer(job, "max_minutes", 20, 5, 90)
+    _integer(job, "max_minutes", 20, 5, 30 if kind == "photo" else 90)
     _integer(job, "batch_count", 1, 1, 20)
     strength = job.get("lora_strength", 0.8)
     if isinstance(strength, bool) or not isinstance(strength, (int, float)) or not 0 <= strength <= 1.5:
@@ -142,7 +174,9 @@ def validate_job(job, assets):
     for key in ("lora_enabled", "generated_audio", "video_ref_audio"):
         if key in job and not isinstance(job[key], bool):
             raise ValueError(f"{key} must be boolean")
-    allowed = capabilities()[kind]["roles"]
+    # Validation must remain pure: live capabilities can probe the private
+    # workstation, while callers may validate under the persistent queue lock.
+    allowed = REFERENCE_LIMITS[kind]
     counts = {role: 0 for role in allowed}
     videos = audios = 0.0
     audio_count = 0
@@ -212,7 +246,8 @@ def _api(path, payload=None):
 
 
 def _worker():
-    spec = importlib.util.spec_from_file_location("studio_simplepod_worker", ROOT / "scripts/simplepod-worker.py")
+    default = Path(__file__).resolve().parent / "runtime/simplepod-worker.py"
+    spec = importlib.util.spec_from_file_location("studio_simplepod_worker", Path(os.environ.get("NORA_SIMPLEPOD_WORKER_MODULE", str(default))))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -434,6 +469,7 @@ def _photo(job, job_dir, assets, progress, cancelled):
 def _video(job, job_dir, assets, progress, cancelled):
     w = _worker()
     state = json.loads(w.STATE.read_text())
+    original_instance_id = state["instance_id"]
     events = []
     resumed = False
     try:
@@ -484,9 +520,18 @@ def _video(job, job_dir, assets, progress, cancelled):
         owned = resumed or any(e["event"] == "resume_accepted" for e in events)
         try:
             if owned:
-                progress({"stage": "pausing_gpu"})
-                current = json.loads(w.STATE.read_text())
-                if current["instance_id"] != state["instance_id"]:
+                # Accounting/UI availability cannot veto rental cleanup. Preserve
+                # its failure in local evidence without replacing the original
+                # inference/startup error or leaking a database error message.
+                try:
+                    progress({"stage": "pausing_gpu"})
+                except Exception as exc:
+                    events.append({"event": "pause_progress_unavailable", "error_type": type(exc).__name__})
+                try:
+                    current = json.loads(w.STATE.read_text())
+                except (OSError, ValueError):
+                    current = None
+                if current and current["instance_id"] not in (original_instance_id, state["instance_id"]):
                     raise RuntimeError("Worker ownership changed; refusing to pause another rental")
                 w.pause(state, events)
         finally:
@@ -506,7 +551,10 @@ def run_job(job, job_dir, assets, progress, cancelled):
             raise InterruptedError("Job cancelled")
         progress({"stage": "preparing"})
         prepared = _prepare(assets, job_dir)
-        results = (_video if job["kind"] == "video" else _photo)(job, job_dir, prepared, progress, cancelled)
+        if job["kind"] == "photo" and os.environ.get("NORA_QWEN_EXECUTOR_URL"):
+            results = _qwen_executor().run_remote(job, job_dir, prepared, progress, cancelled)
+        else:
+            results = (_video if job["kind"] == "video" else _photo)(job, job_dir, prepared, progress, cancelled)
         if not results:
             raise RuntimeError("Comfy completed without downloadable outputs")
         return results

@@ -1,4 +1,4 @@
-import { isReadOnly } from "./runtime.js";
+import { isReadOnly, modelUnavailableReason } from "./runtime.js";
 import { runtime, descriptor, request, refresh, publish } from "./runtime.js";
 const imageExtensions = /\.(png|jpe?g|webp)$/i;
 export function refsFor(params, m) {
@@ -89,8 +89,8 @@ export function buildJob(params) {
 async function enqueue(_key, params) {
   if (isReadOnly()) throw Error("Режим просмотра: генерация отключена");
   const job = buildJob(params);
-  if (descriptor(params.model)?.credential_configured === false)
-    throw Error("Исполнитель недоступен или API-ключ не настроен на сервере");
+  const unavailable = modelUnavailableReason(params.model);
+  if (unavailable) throw Error(unavailable);
   const response = await request("/api/jobs", job);
   await refresh();
   window.dispatchEvent(

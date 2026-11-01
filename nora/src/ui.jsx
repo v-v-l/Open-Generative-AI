@@ -1,4 +1,4 @@
-import { isReadOnly } from "./runtime.js";
+import { isReadOnly, availabilityReason, modelUnavailable } from "./runtime.js";
 import React, { useEffect, useState } from "react";
 import { runtime, publish, request, refresh, descriptor } from "./runtime.js";
 import { buildJob, uploadFile, historyFor, hideHistory } from "./api.js";
@@ -47,6 +47,7 @@ export function NoraSummary({ params }) {
     };
   }, [signature, extraVersion]);
   if (!model) return null;
+  const unavailable = availabilityReason(model, state);
   const extras = runtime.extraAssets[model.id] || [];
   async function attach(files) {
     setBusy(true);
@@ -75,6 +76,15 @@ export function NoraSummary({ params }) {
     upper = estimate?.upper_usd;
   return (
     <div className="nora-summary">
+      {unavailable ? (
+        <p className="nora-warning" role="status">
+          {unavailable}
+        </p>
+      ) : model.id === "qwen-local" &&
+        model.available === true &&
+        model.availability === "executor_ready" ? (
+        <p role="status">Qwen · Доступна</p>
+      ) : null}
       {model.id === "h3-simplepod" && (
         <>
           <details>
@@ -171,12 +181,6 @@ export function NoraSummary({ params }) {
           .
         </p>
       </details>
-      {model.credential_configured === false && (
-        <p className="nora-warning">
-          Исполнитель недоступен или ключ {model.provider} не настроен на
-          сервере.
-        </p>
-      )}
     </div>
   );
 }
@@ -234,6 +238,12 @@ export function Queue() {
               </header>
               <p>{job.prompt}</p>
               {job.error && <p className="nora-warning">{job.error}</p>}
+              {job.status === "queued" && modelUnavailable(job.model) && (
+                <p className="nora-warning" role="status">
+                  {availabilityReason(descriptor(job.model), state)} Выполнение
+                  недоступно.
+                </p>
+              )}
               {job.billing && job.billing.actual_usd == null && (
                 <small>Стоимость неизвестна</small>
               )}
@@ -258,7 +268,7 @@ export function Queue() {
                   job.status,
                 ) && (
                   <button
-                    disabled={isReadOnly()}
+                    disabled={isReadOnly() || modelUnavailable(job.model)}
                     onClick={() => void act("/api/jobs/" + job.id + "/retry")}
                   >
                     Повторить

@@ -16,7 +16,7 @@ import secrets
 import getpass
 from http.cookies import SimpleCookie, CookieError
 import re
-import sqlite3
+import sys
 import threading
 import time
 import uuid
@@ -25,6 +25,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import storage
 PROJECT = Path(os.environ.get('NORA_PROJECT_ROOT', str(HERE.parents[3]))).expanduser().resolve()
 MAX_BODY = 140 * 1024 * 1024
 MAX_ASSET = 100 * 1024 * 1024
@@ -39,7 +41,7 @@ def safe_error(error):
     text = str(error)
     text = re.sub(r'(?i)(bearer\s+|(?:api[_-]?key|token|password|secret)\s*[=:]\s*)[^\s,;]+', r'\1[redacted]', text)
     text = re.sub(r'\bsk-[A-Za-z0-9_-]+', '[redacted]', text)
-    text = re.sub(r'https?://[^\s]+', '[URL redacted]', text)
+    text = re.sub(r'(?i)(?:https?|postgres(?:ql)?)://[^\s]+', '[URL redacted]', text)
     return text[:1000]
 
 
@@ -163,7 +165,7 @@ def hash_password(password):
 
 
 class Studio:
-    def __init__(self, root):
+    def __init__(self, root, database_url=None):
         self.root = Path(root).resolve()
         if not (self.root.is_relative_to(PROJECT / 'outputs') or self.root.is_relative_to(Path('/tmp'))):
             raise ValueError('Studio root must be under project outputs or /tmp')
@@ -181,14 +183,12 @@ class Studio:
         self.wake = threading.Event()
         self.stopping = threading.Event()
         self.active = None
-        self.db = sqlite3.connect(self.root / 'queue.sqlite3', check_same_thread=False)
-        self.db.row_factory = sqlite3.Row
-        self.db.executescript('''PRAGMA journal_mode=WAL;
-          CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS assets(id TEXT PRIMARY KEY,name TEXT,mime TEXT,path TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,status TEXT NOT NULL,created_at TEXT,updated_at TEXT,payload TEXT NOT NULL,result TEXT,error TEXT,progress TEXT,cancel_requested INTEGER DEFAULT 0);
-        ''')
-        self.db.execute("INSERT OR IGNORE INTO settings VALUES('queue_paused','true')")
+        try:
+            self.db = storage.connect(self.root, database_url)
+        except BaseException:
+            self.ownership.close()
+            raise
+        self.db.execute("INSERT INTO settings VALUES('queue_paused','true') ON CONFLICT(key) DO NOTHING")
         self.db.execute("UPDATE jobs SET status='interrupted',error='Server restarted during generation; retry explicitly after checking remote work.',updated_at=? WHERE status='running'", (now(),))
         # Restarts require a deliberate resume, including after a clean shutdown.
         self.db.execute("UPDATE settings SET value='true' WHERE key='queue_paused'")
@@ -345,7 +345,19 @@ class Studio:
             self.wake.clear()
             with self.lock:
                 if self.paused(): continue
-                row = self.db.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at,rowid LIMIT 1").fetchone()
+                row = None
+                readiness = getattr(engine(), 'job_readiness', None)
+                for candidate in self.db.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at,rowid").fetchall():
+                    payload = json.loads(candidate['payload'])
+                    ready = readiness(payload) if readiness else {'available': True}
+                    if not ready.get('available', False):
+                        progress = json.dumps({'stage':'waiting_for_executor','message':safe_error(ready.get('reason','Executor unavailable'))})
+                        if candidate['progress'] != progress:
+                            self.db.execute('UPDATE jobs SET progress=?,updated_at=? WHERE id=?', (progress,now(),candidate['id']))
+                        continue
+                    row = candidate
+                    break
+                self.db.commit()
                 if row is None: continue
                 identifier = row['id']
                 self.active = identifier

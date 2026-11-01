@@ -86,6 +86,20 @@ http
         body = JSON.parse(Buffer.concat(chunks) || "{}");
       }
       const p = req.url.split("?")[0];
+      if (p === "/__availability") {
+        const qwen = models.find((model) => model.id === "qwen-local");
+        qwen.available = body.available;
+        qwen.availability = body.available
+          ? "executor_ready"
+          : "executor_offline";
+        qwen.availability_reason = body.available
+          ? ""
+          : "Local Qwen workstation is offline";
+        state.capabilities.executors = {
+          qwen: { available: body.available, status: qwen.availability },
+        };
+        return send(res, { available: qwen.available });
+      }
       if (p === "/api/state") return send(res, state);
       if (p === "/api/estimate")
         return send(res, {

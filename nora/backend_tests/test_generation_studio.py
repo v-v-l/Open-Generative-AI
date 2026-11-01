@@ -32,7 +32,7 @@ class QueueTest(unittest.TestCase):
             return [{'path': str(target), 'kind': 'image'}]
         fake.run_job = run
         sys.modules['engine'] = fake
-        self.studio = server.Studio(self.temp.name)
+        self.studio = server.Studio(self.temp.name, database_url="")
 
     def tearDown(self):
         self.studio.stopping.set()

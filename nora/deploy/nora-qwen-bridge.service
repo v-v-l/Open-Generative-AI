@@ -1,0 +1,14 @@
+[Unit]
+Description=Private Qwen-only reverse tunnel to apps
+After=network-online.target nora-qwen-executor.service
+Wants=network-online.target nora-qwen-executor.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ssh -N -T -i /home/victor/.ssh/bbright_codex_ed25519 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -R 127.0.0.1:36447:127.0.0.1:36446 victor@apps
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

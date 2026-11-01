@@ -1,0 +1,10 @@
+{
+  "name": "nora-simplepod-control-runtime",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=22"},
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@simplepod.ai/mcp-rental": "0.1.1"
+  }
+}

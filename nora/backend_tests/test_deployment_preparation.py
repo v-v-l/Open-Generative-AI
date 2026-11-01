@@ -17,7 +17,7 @@ class DeploymentPreparation(unittest.TestCase):
         for script in scripts:
             subprocess.run(['bash','-n',str(script)],check=True,capture_output=True)
 
-    def test_release_preparation_uses_external_runtime_and_only_static_bundle(self):
+    def test_release_preparation_bundles_source_but_no_runtime_credentials(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);runtime=root/'runtime';runtime.mkdir()
             (runtime/'.env').write_text('OPENAI_API_KEY=never-copy-this-fixture-secret\n')
@@ -26,7 +26,9 @@ class DeploymentPreparation(unittest.TestCase):
             subprocess.run([str(DEPLOY/'prepare-release.sh')],env=env,check=True,capture_output=True,text=True)
             bundle=runtime/'work/media-studio-deploy/releases/test-release'
             manifest=json.loads((bundle/'release.json').read_text())
-            self.assertEqual({f['path'] for f in manifest['files']},{'Apps.Caddyfile','compose.yml','dist/index.html'})
+            paths={f['path'] for f in manifest['files']}
+            self.assertTrue({'Apps.Caddyfile','compose.yml','dist/index.html','nora-media-apps-backend.service','backend/server.py','backend/engine.py'}.issubset(paths))
+            self.assertFalse(any('__pycache__' in p or p.endswith('.pyc') or p.endswith('.env') for p in paths))
             for item in manifest['files']:
                 content=(bundle/item['path']).read_bytes()
                 self.assertEqual(hashlib.sha256(content).hexdigest(),item['sha256'])

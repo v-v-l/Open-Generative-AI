@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: pg_nora_media_prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nora_media_prod
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
+      MEDIA_DATABASE_PASSWORD: ${MEDIA_DATABASE_PASSWORD:?required}
+    ports:
+      - "192.168.100.75:${MEDIA_DATABASE_PORT:?required}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./init.sh:/docker-entrypoint-initdb.d/10-media.sh:ro
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    command: [postgres, -c, hba_file=/etc/postgresql/pg_hba.conf]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d nora_media_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+volumes:
+  pgdata:
+    name: pg_nora_media_prod_data

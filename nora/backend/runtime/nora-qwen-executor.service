@@ -1,0 +1,19 @@
+[Unit]
+Description=Private authenticated Qwen photo executor
+After=network-online.target nora-comfy-photos.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/victor/Projects/Nora
+Environment=NORA_PROJECT_ROOT=/home/victor/Projects/Nora
+EnvironmentFile=/home/victor/Projects/Nora/work/generation-studio/qwen-executor.env
+ExecStart=/usr/bin/python3 /home/victor/Projects/Nora/apps/open-generative-ai/nora/backend/qwen_executor.py --port 36446
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

@@ -9,7 +9,10 @@ release_id="${MEDIA_STUDIO_RELEASE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 [[ -f "$frontend_dist/index.html" ]] || { echo "Build the selected frontend first: $frontend_dist/index.html is missing" >&2; exit 1; }
 bundle="$project_root/work/media-studio-deploy/releases/$release_id"
 [[ ! -e "$bundle" ]] || { echo 'Release already exists; choose a new release ID' >&2; exit 1; }
-mkdir -p "$bundle/dist"
+mkdir -p "$bundle/dist" "$bundle/backend"
+cp -a "$(dirname "$script_dir")/backend/." "$bundle/backend/"
+find "$bundle/backend" -type d -name __pycache__ -prune -exec rm -rf {} +
+cp "$script_dir/nora-media-apps-backend.service" "$bundle/"
 cp -a "$frontend_dist/." "$bundle/dist/"
 cp "$script_dir/Apps.Caddyfile" "$bundle/"
 cp "$script_dir/compose.yml" "$bundle/"
