@@ -27,9 +27,10 @@ except urllib.error.HTTPError as e:
 else:raise SystemExit('Unsafe public backend: loopback Host bypass remains enabled')
 print('Release checksum and tunnel authentication guards verified')
 PY
-docker compose -p nora-media -f "$release/compose.yml" config --quiet
+docker compose -p nora-media -f "$release/compose.yml" config --quiet </dev/null
 # Validate the actual mounted files with exactly the service identity/capabilities.
-docker compose -p nora-media -f "$release/compose.yml" run --rm --no-deps --entrypoint caddy frontend validate --config /etc/caddy/Caddyfile --adapter caddyfile
-docker compose -p nora-media -f "$release/compose.yml" up -d
+# Docker must not consume the remaining SSH-streamed shell commands on stdin.
+docker compose -p nora-media -f "$release/compose.yml" run --rm --no-deps --entrypoint caddy frontend validate --config /etc/caddy/Caddyfile --adapter caddyfile </dev/null
+docker compose -p nora-media -f "$release/compose.yml" up -d </dev/null
 printf 'Apps frontend activated from reviewed release %s; gateway unchanged.\n' "$1"
 REMOTE
