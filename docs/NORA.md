@@ -64,6 +64,20 @@ Keep the previous static release for rollback. Queue SQLite, uploaded references
 provider accounting and output files are outside the frontend release. Do not
 roll back this data or resubmit jobs just because the UI was rolled back.
 
+For a frontend/proxy-only update, stage a new immutable apps release, run the
+private candidate access gate, then activate that release. Reuse the existing
+gateway route; the gateway helper is for initial site creation and deliberately
+refuses to append a duplicate site.
+
+For a backend update, pause and drain active work first. Stop the backend before
+fast-forwarding its checked-out source so one process cannot mix old Python
+modules with new templates. Then restart `nora-media-backend.service`, verify
+public authentication and the paused queue, and keep the SSH tunnel running.
+`activate-laptop.sh` performs the initial handover and deliberately refuses an
+implicit restart of an already active public backend. Backend rollback uses the
+same idle-work guard, the previous source commit and a service restart; it never
+rolls back the external SQLite database.
+
 Refresh provider models/prices separately through the explicit catalog-refresh
 operation after queued/running work is finished or cancelled. Refresh is blocked
 while unfinished jobs exist, so their endpoint settings are not silently replaced. A catalog update must not generate media, select another model, or
@@ -76,3 +90,10 @@ The initial private bridge keeps backend execution on the existing Nora host and
 serves the frontend on apps, routed by gateway at `media.bp-flow.com`. The studio
 needs that host online; Qwen and GPU worker keys are not copied into a public web
 container. No ComfyUI endpoint or reference file is exposed without studio auth.
+
+## Verified deployment
+
+The private studio is available at https://media.bp-flow.com. Release and
+verification records are in [the deployment ledger](../deploy/pending-prod.md);
+[data flow](diagrams/data-flow.md), [queue schema](diagrams/schema.md) and
+[user journey](diagrams/user-journey.md) describe the integration boundaries.
