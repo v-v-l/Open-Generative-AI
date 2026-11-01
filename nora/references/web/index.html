@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Алиса · библиотека референсов</title>
+    <link rel="stylesheet" href="/references/app.css" />
+  </head>
+  <body>
+    <header>
+      <a href="/" class="studio-link">← Студия</a>
+      <div class="eyebrow">БИБЛИОТЕКА ПЕРСОНАЖА</div>
+      <h1>Алиса<span> / референсы</span></h1>
+      <p>
+        Просмотр оригиналов и сборка одного референсного листа из выбранных
+        фотографий.
+      </p>
+      <p class="purpose">
+        Библиотека только для чтения · выбор и экспорт не меняют исходники.
+      </p>
+      <div id="summary" class="summary"></div>
+    </header>
+    <main>
+      <section class="library" aria-label="Библиотека референсов">
+        <nav id="tabs" aria-label="Разделы"></nav>
+        <div class="filters">
+          <button id="refresh-library" type="button">Обновить ↻</button
+          ><label class="search-label"
+            >Найти ракурс или причёску<input
+              id="search"
+              type="search"
+              placeholder="Например: хвост, профиль, ¾" /></label
+          ><label class="check"
+            ><input id="candidates" type="checkbox" />Показать кандидатов</label
+          >
+        </div>
+        <p id="section-note" class="section-note"></p>
+        <div class="collection-controls">
+          <label
+            >Набор<select id="collection">
+              <option value="">Текущий раздел</option>
+            </select></label
+          ><button id="select-collection" type="button">Выбрать набор</button>
+          <a id="selection-link" href="#sheet-controls">К листу · 0</a>
+        </div>
+        <p id="collection-note" class="section-note"></p>
+        <div id="cards" class="cards"></div>
+        <p id="empty" hidden>Таких референсов пока нет.</p>
+        <section
+          id="missing"
+          class="missing"
+          aria-label="Недостающие ракурсы"
+        ></section>
+      </section>
+      <aside id="sheet-controls" aria-label="Референсный лист" tabindex="-1">
+        <div class="eyebrow">СОБРАТЬ ЛИСТ</div>
+        <h2>Выбранные фотографии <span id="selection-count">0 / 16</span></h2>
+        <p class="hint">
+          Порядок: слева направо, затем следующая строка. Стрелки меняют
+          положение фотографии.
+        </p>
+        <ol id="selection" class="selection"></ol>
+        <p id="selection-empty" class="hint">
+          Добавьте фотографии из библиотеки или выберите целый набор.
+        </p>
+        <button id="clear-selection" type="button" disabled>
+          Очистить выбор
+        </button>
+        <fieldset class="sheet-settings">
+          <legend>Расположение</legend>
+          <label
+            >Колонки<select id="columns">
+              <option>1</option>
+              <option>2</option>
+              <option>3</option>
+              <option selected>4</option>
+              <option>5</option>
+              <option>6</option>
+              <option>7</option>
+              <option>8</option>
+            </select></label
+          ><label
+            >Ширина ячейки, px<input
+              id="cell-width"
+              type="number"
+              min="128"
+              max="2048"
+              step="1"
+              value="512" /></label
+          ><label
+            >Высота ячейки, px<input
+              id="cell-height"
+              type="number"
+              min="128"
+              max="2048"
+              step="1"
+              value="768" /></label
+          ><label class="check"
+            ><input id="labels" type="checkbox" />Подписи с ID</label
+          >
+        </fieldset>
+        <p class="hint">
+          Фотографии помещаются целиком, с полями при необходимости. Кроп не
+          применяется. До 16 фотографий и 64 мегапикселей на лист.
+        </p>
+        <div
+          id="sheet-preview"
+          class="sheet-preview"
+          aria-label="Предпросмотр расположения"
+        ></div>
+        <img
+          id="export-preview"
+          class="export-preview"
+          alt="Готовый референсный лист"
+          hidden
+        />
+        <p id="preview-note" class="hint"></p>
+        <button id="build-sheet" class="primary" type="button" disabled>
+          Собрать PNG</button
+        ><a
+          id="download-sheet"
+          class="download"
+          hidden
+          download="alice-reference-sheet.png"
+          >Скачать PNG</a
+        ><button id="download-zip" type="button" hidden disabled>
+          Скачать выбранные оригиналы · ZIP
+        </button>
+        <p id="status" role="status" aria-live="polite"></p>
+      </aside>
+    </main>
+    <dialog id="preview">
+      <button id="close-preview" class="close" aria-label="Закрыть просмотр">
+        ×</button
+      ><img id="preview-image" alt="" />
+      <div class="preview-footer">
+        <div>
+          <strong id="preview-title"></strong>
+          <p id="preview-meta"></p>
+        </div>
+        <a id="original" download>Скачать оригинал</a>
+      </div>
+    </dialog>
+    <footer>
+      Углы сгенерированных ракурсов номинальные. Статус «Кандидат» сохраняется
+      при выборе и экспорте. Пустые и недостающие ракурсы не достраиваются.
+    </footer>
+    <script src="/references/app.js" defer></script>
+  </body>
+</html>

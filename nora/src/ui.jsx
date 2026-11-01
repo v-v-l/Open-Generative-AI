@@ -325,6 +325,7 @@ export function Shell({ ImageStudio, VideoStudio }) {
             </button>
           ))}
         </nav>
+        <a href="/references/" className="nora-reference-link">Референсы ↗</a>
         <button
           disabled={isReadOnly()}
           onClick={async () => {

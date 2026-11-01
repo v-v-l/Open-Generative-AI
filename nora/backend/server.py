@@ -22,14 +22,16 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, quote, parse_qs
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import storage
+from reference_library import LibraryError
 PROJECT = Path(os.environ.get('NORA_PROJECT_ROOT', str(HERE.parents[3]))).expanduser().resolve()
 MAX_BODY = 140 * 1024 * 1024
 MAX_ASSET = 100 * 1024 * 1024
+REFERENCE_EXPORT_LOCK = threading.BoundedSemaphore(1)
 ALLOWED_MIME = {'image/png','.unused','image/jpeg','image/webp','video/mp4','video/quicktime','video/webm','audio/mpeg','audio/mp3','audio/wav','audio/x-wav','audio/flac','audio/ogg','audio/mp4'} - {'.unused'}
 
 
@@ -494,6 +496,53 @@ class Handler(BaseHTTPRequestHandler):
                     self.wfile.write(chunk); remaining -= len(chunk)
         except (BrokenPipeError, ConnectionResetError): pass
 
+    def references(self):
+        library = getattr(self.server, 'reference_library', None)
+        if library is None:
+            import reference_library
+            library = reference_library.Library()
+            self.server.reference_library = library
+        return library
+
+    def reference_binary(self, result, download=False):
+        data = result['bytes']
+        self.send_response(200)
+        self.send_header('Content-Type', result['kind'])
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Cache-Control', 'private, no-store')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('X-Frame-Options', 'DENY')
+        if download:
+            filename = result['filename']
+            fallback = re.sub(r'[^A-Za-z0-9._-]', '_', filename)[:120]
+            self.send_header('Content-Disposition', 'attachment; filename="'+fallback+'"; filename*=UTF-8\'\''+quote(filename,safe=''))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def reference_get(self, route):
+        try:
+            if route == '/references/api/catalog':
+                return self.send(200, self.references().catalog('/references'))
+            for prefix, operation in (('/references/image/', 'original'), ('/references/file/', 'original'), ('/references/thumb/', 'thumbnail')):
+                if route.startswith(prefix):
+                    ident = route[len(prefix):]
+                    if not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', ident):
+                        return self.send(404, {'error':'Reference not found'})
+                    result = getattr(self.references(), operation)(ident)
+                    return self.reference_binary(result, download=prefix=='/references/file/')
+            relative = route[len('/references/'):]
+            if relative not in ('', 'index.html', 'app.js', 'app.css'):
+                return self.send(404, {'error':'Reference route not found'})
+            path = HERE.parent/'references/web'/(relative or 'index.html')
+            if not path.is_file(): return self.send(404, {'error':'Library page not found'})
+            return self.file(path, mimetypes.guess_type(path.name)[0] or 'application/octet-stream')
+        except LibraryError as exc:
+            return self.send(exc.status, {'error':safe_error(exc)})
+        except (ValueError, KeyError, FileNotFoundError):
+            return self.send(404, {'error':'Reference not found'})
+        except (RuntimeError, OSError):
+            return self.send(503, {'error':'Reference library is unavailable'})
+
     def do_GET(self):
         if not self.allowed(): return self.send(403,{'error':'Allowed host and same origin required'})
         route = urlsplit(self.path).path
@@ -504,11 +553,17 @@ class Handler(BaseHTTPRequestHandler):
         if route == '/api/auth/check':
             if not self.authenticated(): return self.send(401,{'error':'Authentication required'})
             self.send_response(204);self.send_header('Cache-Control','no-store');self.end_headers();return
-        if route == '/login': return self.login_page('/')
+        if route == '/login':
+            target = parse_qs(urlsplit(self.path).query).get('next',['/'])[0]
+            return self.login_page('/references/' if target in ('/references','/references/') else '/')
         if not self.authenticated():
             if route in ('/','/directcut','/directcut/') or 'text/html' in self.headers.get('Accept',''):
                 return self.login_page(route)
             return self.send(401,{'error':'Authentication required'})
+        if route == '/references':
+            self.send_response(302);self.send_header('Location','/references/');self.end_headers();return
+        if route.startswith('/references/'):
+            return self.reference_get(route)
         if route == '/api/state':
             try: caps = engine().capabilities()
             except Exception as exc: caps = {'available':False,'error':safe_error(exc)}
@@ -541,7 +596,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed(): return self.send(403,{'error':'Allowed host and same origin required'})
         route = urlsplit(self.path).path
-        if getattr(self.server, 'read_only', False) and route not in ('/api/auth/login','/api/auth/logout','/api/estimate'):
+        if getattr(self.server, 'read_only', False) and route not in ('/api/auth/login','/api/auth/logout','/api/estimate','/references/api/export','/references/api/zip'):
             return self.send(403,{'error':'This isolated preview is read-only; generation is disabled'})
         if route not in ('/api/auth/login',) and not self.authenticated():
             return self.send(401,{'error':'Authentication required'})
@@ -565,6 +620,17 @@ class Handler(BaseHTTPRequestHandler):
                 auth = self.auth()
                 if auth: auth.logout(self.headers.get('Cookie'))
                 return self.send(200,{'authenticated':False},cookie=auth.cookie('',clear=True) if auth and auth.required else None)
+            if route in ('/references/api/export', '/references/api/zip'):
+                if not REFERENCE_EXPORT_LOCK.acquire(blocking=False):
+                    return self.send(429, {'error':'An export is already running; try again shortly'})
+                try:
+                    library = self.references()
+                    result = library.export_sheet(payload) if route.endswith('/export') else library.export_zip(payload)
+                    return self.reference_binary(result, download=True)
+                finally:
+                    REFERENCE_EXPORT_LOCK.release()
+            if route.startswith('/references/'):
+                return self.send(404, {'error':'Reference operation not found'})
             if route == '/api/uploads':
                 mime = str(payload.get('mime','')).lower()
                 if mime not in ALLOWED_MIME: raise ValueError('Unsupported media type')
@@ -630,6 +696,7 @@ class Handler(BaseHTTPRequestHandler):
                     studio.db.execute('UPDATE jobs SET status=?,cancel_requested=1,updated_at=? WHERE id=?',(status,now(),ident)); studio.db.commit()
                 return self.send(200,{'id':ident,'status':status,'cancel_requested':True})
             return self.send(404,{'error':'Not found'})
+        except LibraryError as exc: return self.send(exc.status,{'error':safe_error(exc)})
         except (ValueError,TypeError,KeyError,binascii.Error) as exc: return self.send(400,{'error':safe_error(exc)})
         except Exception as exc: return self.send(503,{'error':safe_error(exc)})
 

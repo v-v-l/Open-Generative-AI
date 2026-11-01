@@ -19,7 +19,7 @@
         respond @blocked "Private gateway access only" 403
         @wrong_host not host media.bp-flow.com
         respond @wrong_host "Unknown host" 403
-        @backend path /api/* /media/* /login
+        @backend path /api/* /media/* /login /references /references/*
         handle @backend {
             reverse_proxy 127.0.0.1:36442 {
                 header_up Host media.bp-flow.com

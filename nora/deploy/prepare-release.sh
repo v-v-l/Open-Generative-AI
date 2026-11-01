@@ -12,6 +12,9 @@ bundle="$project_root/work/media-studio-deploy/releases/$release_id"
 mkdir -p "$bundle/dist" "$bundle/backend"
 cp -a "$(dirname "$script_dir")/backend/." "$bundle/backend/"
 find "$bundle/backend" -type d -name __pycache__ -prune -exec rm -rf {} +
+mkdir -p "$bundle/references"
+cp -a "$(dirname "$script_dir")/references/." "$bundle/references/"
+find "$bundle/references" -type d -name __pycache__ -prune -exec rm -rf {} +
 cp "$script_dir/nora-media-apps-backend.service" "$bundle/"
 cp -a "$frontend_dist/." "$bundle/dist/"
 cp "$script_dir/Apps.Caddyfile" "$bundle/"

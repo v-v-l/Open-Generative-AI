@@ -71,7 +71,7 @@ for attempt in range(12):
   if attempt==11:raise
   time.sleep(1)
 checks={}
-for path in ['/api/state','/media/'+'0'*32]:
+for path in ['/api/state','/media/'+'0'*32,'/references/api/catalog','/references/file/F01','/references/app.js']:
  status,_,_=get(path)
  if status!=401:raise SystemExit('Anonymous API/media privacy gate failed')
  checks[path]=status
