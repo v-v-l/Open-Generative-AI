@@ -198,3 +198,11 @@ close button or a desktop backdrop click closes it and returns focus to the trig
 keyboard focus stays within the open sidebar. Supported models show their stored
 actual seed on the job card. The same sidebar works on mobile without a separate
 full-width queue bar.
+
+### Parameter window
+
+In Image/Video Studio, **Параметры** opens a screen-fitting modal with its own
+scrolling field area and reachable **Применить / Отменить** buttons. Edits stay in
+a draft until Apply; Cancel, Escape, close and backdrop discard them. Applying
+updates the supported parameters together without changing the prompt, references
+or separately selected seed. Closing returns focus to the parameter button.

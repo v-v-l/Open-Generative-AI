@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl } from "@nora/ui";
+import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, NoraParameterControls } from "@nora/ui";
 import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateImage, generateI2I, uploadFile } from "../muapi.js";
 import { formatErrorMessage } from "../utils/formatError.js";
 import { scopedPersistKey, migrateLegacyPersistKey } from "../persistKey.js";
 import DrawModal from "./DrawModal.jsx";
-import ModelParameterControls from "./ModelParameterControls.jsx";
 import MobileGenerationActions, {
   GenerationCopyButtons,
 } from "./MobileGenerationActions.jsx";
@@ -1681,20 +1680,7 @@ export default function ImageStudio({
                 )}
               </div>
 
-              <ModelParameterControls
-                inputs={supplementalInputs}
-                values={modelParameterValues}
-                onChange={(key, value) =>
-                  setModelParameterValues((values) => ({ ...values, [key]: value }))
-                }
-                open={dropdownOpen === "parameters"}
-                onToggle={(event) => {
-                  event.stopPropagation();
-                  setDropdownOpen((open) =>
-                    open === "parameters" ? null : "parameters",
-                  );
-                }}
-              />
+              <NoraParameterControls onOpen={() => setDropdownOpen(null)} inputs={supplementalInputs} values={modelParameterValues} onApply={patch => setModelParameterValues(values => ({...values,...patch}))} />
 
               <NoraSeedControl modelId={selectedModelId} value={modelParameterValues.seed} onChange={value => setModelParameterValues(values => ({...values, seed:value}))} />
 

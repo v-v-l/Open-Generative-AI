@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
-import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, noraReferenceInputs } from "@nora/ui";
+import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, NoraParameterControls, noraReferenceInputs } from "@nora/ui";
 import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateVideo, generateI2V, processV2V, uploadFile } from "../muapi.js";
 import { formatErrorMessage } from "../utils/formatError.js";
 import { scopedPersistKey, migrateLegacyPersistKey } from "../persistKey.js";
 import DrawModal from "./DrawModal.jsx";
-import ModelParameterControls from "./ModelParameterControls.jsx";
 import { VideoOptionControl, VideoSettingsControl } from "./VideoModelControls.jsx";
 import MobileGenerationActions, {
   GenerationCopyButtons,
@@ -2962,13 +2961,7 @@ export default function VideoStudio({
                   copy={groupCopy}
                 />
               ) : (
-                <ModelParameterControls
-                  inputs={supplementalInputs.filter(input => input.key !== "seed")}
-                  values={modelParameterValues}
-                  onChange={handleModelParameterChange}
-                  open={openDropdown === "parameters"}
-                  onToggle={toggleDropdown("parameters")}
-                />
+                <NoraParameterControls onOpen={() => setOpenDropdown(null)} inputs={supplementalInputs.filter(input => input.key !== "seed")} values={modelParameterValues} onApply={patch => { for (const [key,value] of Object.entries(patch)) handleModelParameterChange(key,value); }} />
               )}
 
               <NoraSeedControl modelId={selectedModel} value={modelParameterValues.seed} onChange={value => setModelParameterValues(values => ({...values, seed:value}))} />

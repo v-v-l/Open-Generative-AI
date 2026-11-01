@@ -12,6 +12,7 @@ preserved separately in the original README below the fork notice.
 - Open the queue from a compact hamburger button as a desktop/mobile sidebar.
 
 ### Fixed
+- Replaced the clipped parameter popover with a scrolling modal and Apply/Cancel draft editing in photo and video studios.
 - Moved branding, references, catalog refresh and logout into the shared hamburger menu on desktop and mobile.
 - Random-seed drafts can obtain price estimates without allocating or changing the eventual generation seed.
 - Filter video references by the selected model capabilities and explain removal of incompatible attachments after model changes.

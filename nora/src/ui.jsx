@@ -5,6 +5,7 @@ import { buildJob, historyFor, hideHistory } from "./api.js";
 export { NoraAttachments } from "./attachments.jsx";
 export { NoraComposer } from "./composer.jsx";
 export { NoraSeedControl } from "./seed.jsx";
+export { NoraParameterControls } from "./parameters.jsx";
 import { supportsSeed, modelDisplayName } from "./catalog.js";
 export { referenceInputs as noraReferenceInputs } from "./api.js";
 export function useRuntime() {

@@ -843,3 +843,180 @@ body {
     padding: 14px 16px;
   }
 }
+.nora-params-trigger {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid #ffffff12;
+  border-radius: 6px;
+  background: #16161a;
+  color: #22d3ee;
+  font-size: 10px;
+  cursor: pointer;
+}
+.nora-params-trigger > span {
+  color: #c8c8d0;
+}
+.nora-params-dialog {
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translateX(-50%);
+  margin: 0;
+  width: min(520px, calc(100vw - 24px));
+  padding: 0;
+  border: 1px solid #ffffff22;
+  border-radius: 16px;
+  background: #17171b;
+  color: #dedee7;
+  overflow: hidden;
+  box-shadow: 0 20px 90px #0009;
+}
+.nora-params-dialog[open] {
+  display: flex;
+}
+.nora-params-dialog::backdrop {
+  background: #000a;
+}
+.nora-params-dialog form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: inherit;
+  width: 100%;
+}
+.nora-params-dialog header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #ffffff15;
+}
+.nora-params-dialog h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.nora-params-dialog button {
+  border: 1px solid #ffffff25;
+  border-radius: 8px;
+  padding: 9px 14px;
+  background: #ffffff08;
+  color: #dedee7;
+  font-size: 12px;
+  cursor: pointer;
+  min-height: 38px;
+}
+.nora-params-dialog header > button {
+  font-size: 22px;
+  padding: 1px 12px;
+}
+.nora-params-scroll {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  flex: 1;
+}
+.nora-param-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.nora-param-field > label {
+  font-size: 12px;
+  font-weight: 600;
+}
+.nora-param-field small,
+.nora-param-array small {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #9b9ba8;
+}
+.nora-param-field input:not([type="checkbox"]),
+.nora-param-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border-radius: 7px;
+  background: #0e0e11;
+  border: 1px solid #ffffff25;
+  color: #e4e4eb;
+  font-size: 16px;
+  min-height: 42px;
+}
+.nora-param-boolean {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+.nora-param-boolean small {
+  grid-column: 1/-1;
+}
+.nora-param-boolean input {
+  width: 20px;
+  height: 20px;
+  accent-color: #22d3ee;
+}
+.nora-param-array,
+.nora-param-object {
+  min-width: 0;
+  border: 1px solid #ffffff20;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.nora-param-array legend,
+.nora-param-object legend {
+  font-size: 12px;
+}
+.nora-params-dialog footer {
+  flex-shrink: 0;
+  border-top: 1px solid #ffffff15;
+  padding: 12px 20px max(12px, env(safe-area-inset-bottom));
+  background: #17171b;
+}
+.nora-params-dialog footer > div {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.nora-params-dialog footer > p {
+  font-size: 11px;
+  color: #f2b197;
+  margin: 0 0 10px;
+}
+.nora-params-dialog .nora-params-apply {
+  background: #22d3ee;
+  color: #071013;
+  font-weight: 600;
+  border-color: #22d3ee;
+}
+.nora-params-dialog :focus-visible,
+.nora-params-trigger:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: 2px;
+}
+@media (max-width: 540px) {
+  .nora-params-dialog header,
+  .nora-params-scroll {
+    padding: 14px 16px;
+  }
+  .nora-params-dialog footer {
+    padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  }
+  .nora-params-dialog footer button {
+    flex: 1;
+    min-height: 44px;
+  }
+}

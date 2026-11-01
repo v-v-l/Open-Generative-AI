@@ -30,6 +30,10 @@ Seed-capable models offer random or fixed seeds. Enqueue selects and saves the
 actual random seed; the sidebar displays it for supported models, and retry keeps
 the saved seed. Opening/closing the sidebar does not change queue execution.
 
+The parameter modal edits a separate draft. Apply commits the supported settings
+together; Cancel/Escape/backdrop discard edits. Its field region scrolls within
+the viewport while Apply/Cancel remain reachable on mobile.
+
 Qwen-only executor readiness updates with state polling. Offline Qwen disables
 submission/retry while cloud/H3 remain usable; queued offline Qwen work waits for
 its executor without blocking eligible cloud jobs.
