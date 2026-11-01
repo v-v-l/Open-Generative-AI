@@ -1020,3 +1020,30 @@ body {
     min-height: 44px;
   }
 }
+
+/* Reference replacement commits only after the upload succeeds. */
+.nora-attachment-replace {
+  position: relative;
+  display: block;
+  margin-top: 4px;
+  padding: 5px 2px;
+  border-radius: 4px;
+  background: #ffffff0b;
+  color: #d4d4d8;
+  text-align: center;
+  font-size: 10px;
+  cursor: pointer;
+}
+.nora-attachment-replace input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.nora-attachment-replace:focus-within {
+  outline: 2px solid #22d3ee;
+  outline-offset: 2px;
+}
+.nora-attachment-replace.disabled { opacity: 0.4; cursor: default; }

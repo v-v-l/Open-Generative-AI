@@ -157,15 +157,17 @@ class ReferenceLibraryTest(unittest.TestCase):
         self.assertEqual(record['sha256'],hashlib.sha256(raw).hexdigest())
         self.assertEqual(self.library.original(record['id'])['bytes'],raw)
         self.assertIsNone(first['replaced_reference_id'])
-        second=self.upload(collection)
+        retained=self.root/self.library.records[record['id']]['path']
+        second=self.upload(collection,replace_id=record['id'])
         self.assertNotEqual(second['record']['id'],record['id'])
         self.assertEqual(second['replaced_reference_id'],record['id'])
         self.assertEqual(second['collection']['slots'][0]['reference_id'],second['record']['id'])
-        self.assertEqual(self.library.original(record['id'])['bytes'],raw)
+        self.assertEqual(retained.read_bytes(),raw)
+        with self.assertRaises(refs.LibraryError):self.library.original(record['id'])
         catalog=refs.Library(self.root).catalog()
         saved=next(c for c in catalog['collections'] if c['id']==collection['id'])
         self.assertEqual(saved['slots'][0]['reference_id'],second['record']['id'])
-        self.assertEqual(len(catalog['records']),4)
+        self.assertEqual(len(catalog['records']),3)
 
     def test_rejects_upload_mime_paths_bad_data_unknown_slot_and_oversize_before_decode(self):
         collection=self.library.create_collection({'title':'Alice body','category':'body'})['collection']
@@ -286,6 +288,91 @@ class ReferenceLibraryTest(unittest.TestCase):
         for value in ('bytes=-','bytes=-0','bytes=15-20','bytes=4-2','bytes=0-1,3-4','garbage'):
             with self.assertRaises(refs.LibraryError) as error:refs.byte_range(value,10)
             self.assertEqual(error.exception.status,416)
+
+    def test_remove_slot_archives_retains_bytes_and_hides_all_active_access(self):
+        collection=self.library.create_collection({'title':'Body','category':'body'})['collection']
+        record=self.upload(collection)['record'];identifier=record['id']
+        path=self.root/self.library.records[identifier]['path'];raw=path.read_bytes()
+        with self.library._mutation():
+            data=json.loads(json.dumps(self.library.metadata));data['defaults']={'body':identifier};self.library._persist(data)
+        result=self.library.remove_reference({'id':identifier})
+        self.assertIsNone(result['collection']['slots'][0]['reference_id'])
+        self.assertEqual(path.read_bytes(),raw)
+        catalog=refs.Library(self.root).catalog()
+        self.assertNotIn(identifier,json.dumps(catalog))
+        for action in (lambda:self.library.original(identifier),lambda:self.library.original_file(identifier),
+                       lambda:self.library.thumbnail(identifier),lambda:self.library.export_sheet({'ids':[identifier]}),
+                       lambda:self.library.export_zip({'ids':[identifier]})):
+            with self.assertRaises(refs.LibraryError) as error:action()
+            self.assertEqual(error.exception.status,404)
+        with self.assertRaises(refs.LibraryError) as error:self.library.remove_reference({'id':'H000'})
+        self.assertEqual(error.exception.status,403)
+
+    def test_lora_replace_same_index_image_video_and_remove_archive(self):
+        collection=self.library.create_collection({'title':'Dataset','category':'lora'})['collection']
+        first=self.upload(collection,slot_id=None)['record'];second=self.upload(collection,slot_id=None)['record']
+        old_path=self.root/self.library.records[first['id']]['path'];old_bytes=old_path.read_bytes()
+        video=self.upload(collection,slot_id=None,replace_id=first['id'],name='motion.mp4',mime='video/mp4',data=base64.b64encode(self.video_bytes()).decode())
+        video_path=self.root/self.library.records[video['record']['id']]['path'];video_raw=video_path.read_bytes()
+        self.assertEqual(video['collection']['items'],[video['record']['id'],second['id']])
+        self.assertEqual(video['replaced_reference_id'],first['id'])
+        self.assertEqual(old_path.read_bytes(),old_bytes)
+        self.assertNotIn(first['id'],json.dumps(self.library.catalog()))
+        replacement=self.upload(collection,slot_id=None,replace_id=video['record']['id'])
+        self.assertEqual(video_path.read_bytes(),video_raw)
+        with self.assertRaises(refs.LibraryError):self.library.original_file(video['record']['id'])
+        self.assertEqual(replacement['record']['media_kind'],'image')
+        self.assertEqual(replacement['collection']['items'],[replacement['record']['id'],second['id']])
+        removed=self.library.remove_reference({'id':replacement['record']['id']})
+        self.assertEqual(removed['collection']['items'],[second['id']])
+
+    def test_stale_replacement_wrong_membership_and_failed_upload_preserve_active(self):
+        collection=self.library.create_collection({'title':'Face','category':'face'})['collection']
+        first=self.upload(collection)['record']
+        with self.assertRaises(refs.LibraryError) as error:self.upload(collection)
+        self.assertEqual(error.exception.status,409)
+        with self.assertRaises(refs.LibraryError):self.upload(collection,replace_id=first['id'],mime='image/jpeg')
+        self.assertIn(first['id'],self.library.records)
+        with patch.object(refs.os,'replace',side_effect=OSError('storage unavailable')):
+            with self.assertRaises(refs.LibraryError):self.upload(collection,replace_id=first['id'])
+        self.assertIn(first['id'],refs.Library(self.root).records)
+        second=self.upload(collection,replace_id=first['id'])['record']
+        with self.assertRaises(refs.LibraryError) as error:self.upload(collection,replace_id=first['id'])
+        self.assertEqual(error.exception.status,409)
+        other=self.library.create_collection({'title':'Other','category':'lora'})['collection']
+        with self.assertRaises(refs.LibraryError) as error:self.upload(other,slot_id=None,replace_id=second['id'])
+        self.assertEqual(error.exception.status,409)
+        self.assertIn(second['id'],self.library.records)
+
+    def test_concurrent_replacements_only_one_can_archive_expected_current_id(self):
+        collection=self.library.create_collection({'title':'Face','category':'face'})['collection']
+        first=self.upload(collection)['record']
+        raw=base64.b64encode((self.root/'images/H000.png').read_bytes()).decode()
+        def replace(_):
+            library=refs.Library(self.root)
+            try:return library.upload_reference({'collection_id':collection['id'],'slot_id':'a000','replace_id':first['id'],'name':'new.png','mime':'image/png','data':raw})
+            except refs.LibraryError as error:return error.status
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:results=list(pool.map(replace,range(2)))
+        self.assertEqual(sum(isinstance(value,dict) for value in results),1)
+        self.assertIn(409,results)
+        self.assertNotIn(first['id'],json.dumps(self.library.catalog()))
+
+    def test_historical_orphan_upload_can_be_removed_without_touching_current_slot(self):
+        collection=self.library.create_collection({'title':'Face','category':'face'})['collection']
+        first=self.upload(collection)['record']
+        second=self.upload(collection,replace_id=first['id'])['record']
+        # Simulate a pre-archive-version replacement: the old record remained active.
+        with self.library._mutation():
+            data=json.loads(json.dumps(self.library.metadata))
+            old=next(record for record in data['records'] if record['id']==first['id'])
+            for key in ('archived','archived_reason','archived_at'):old.pop(key,None)
+            self.library._persist(data)
+        with self.assertRaises(refs.LibraryError) as error:self.upload(collection,replace_id=first['id'])
+        self.assertEqual(error.exception.status,409)
+        removed=self.library.remove_reference({'id':first['id']})
+        self.assertEqual(removed['collection']['slots'][0]['reference_id'],second['id'])
+        self.assertIn(second['id'],self.library.records)
+        self.assertNotIn(first['id'],self.library.records)
 
 
 if __name__=='__main__':unittest.main()

@@ -19,6 +19,18 @@ export function NoraAttachments({
 }) {
   const [error, setError] = useState("");
   const m = descriptor(modelId);
+  const uploadContext = useRef({ modelId, epoch: 0, mounted: true });
+  if (uploadContext.current.modelId !== modelId) {
+    uploadContext.current.modelId = modelId;
+    uploadContext.current.epoch++;
+  }
+  useEffect(() => {
+    uploadContext.current.mounted = true;
+    return () => {
+      uploadContext.current.mounted = false;
+      uploadContext.current.epoch++;
+    };
+  }, []);
   const previousModel = useRef(modelId);
   useEffect(() => {
     if (!m) return;
@@ -98,8 +110,30 @@ export function NoraAttachments({
       publish();
     } else onChange(role, urls);
   }
+  const accept = (role) => role === "video" ? "video/*" : role === "audio" ? "audio/*" : "image/png,image/jpeg,image/webp";
+  const activeUpload = (epoch) => uploadContext.current.mounted && uploadContext.current.epoch === epoch && uploadContext.current.modelId === modelId;
+  async function replace(role, index, file) {
+    if (!file || isUploading(modelId) || isReadOnly()) return;
+    const epoch = uploadContext.current.epoch;
+    runtime.uploads[modelId] = (runtime.uploads[modelId] || 0) + 1;
+    setError("");
+    publish();
+    try {
+      const url = await uploadFile(null, file);
+      if (!activeUpload(epoch)) return;
+      const next = values[role].slice();
+      next[index] = url;
+      commit(role, next);
+    } catch (e) {
+      if (activeUpload(epoch)) setError(e.message);
+    } finally {
+      runtime.uploads[modelId]--;
+      publish();
+    }
+  }
   async function attach(role, files) {
-    if (!files.length || busy || isReadOnly()) return;
+    if (!files.length || isUploading(modelId) || isReadOnly()) return;
+    const epoch = uploadContext.current.epoch;
     if (values[role].length + files.length > m.roles[role]) {
       setError(`Лимит ${role}: ${m.roles[role]}.`);
       return;
@@ -115,11 +149,12 @@ export function NoraAttachments({
     try {
       for (const file of files) {
         const url = await uploadFile(null, file);
+        if (!activeUpload(epoch)) return;
         next.push(url);
         commit(role, next.slice());
       }
     } catch (e) {
-      setError(e.message);
+      if (activeUpload(epoch)) setError(e.message);
     } finally {
       runtime.uploads[modelId]--;
       publish();
@@ -165,6 +200,19 @@ export function NoraAttachments({
                 <small title={runtime.assetMetadata[url]?.name}>
                   {runtime.assetMetadata[url]?.name || title(role, index)}
                 </small>
+                <label className={"nora-attachment-replace" + (busy || isReadOnly() ? " disabled" : "")}>
+                  Заменить
+                  <input
+                    type="file"
+                    aria-label={"Заменить " + title(role, index)}
+                    accept={accept(role)}
+                    disabled={busy || isReadOnly()}
+                    onChange={(event) => {
+                      void replace(role, index, event.target.files[0]);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
                 <div className="nora-attachment-actions">
                   {m.roles[role] > 1 && (
                     <>
@@ -228,13 +276,7 @@ export function NoraAttachments({
                       ? "Image"
                       : role[0].toUpperCase() + role.slice(1))
                   }
-                  accept={
-                    role === "video"
-                      ? "video/*"
-                      : role === "audio"
-                        ? "audio/*"
-                        : "image/png,image/jpeg,image/webp"
-                  }
+                  accept={accept(role)}
                   multiple={m.roles[role] - values[role].length > 1}
                   disabled={busy || isReadOnly()}
                   onChange={(event) => {

@@ -629,6 +629,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(201, self.references().create_collection(payload))
             if route == '/references/api/uploads':
                 return self.send(201, self.references().upload_reference(payload))
+            if route == '/references/api/remove':
+                return self.send(200, self.references().remove_reference(payload))
             if route in ('/references/api/export', '/references/api/zip'):
                 if not REFERENCE_EXPORT_LOCK.acquire(blocking=False):
                     return self.send(429, {'error':'An export is already running; try again shortly'})

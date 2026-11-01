@@ -714,3 +714,9 @@ dialog .upload-preview {max-height:35vh;width:100%;max-width:100%;object-fit:con
 .video-icon { width: 45px; min-width: 45px; text-align: center; color: var(--accent); }
 .upload-files { max-height: 180px; overflow: auto; padding-left: 20px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 #append-lora { margin: 8px 0; }
+
+.reference-mutations { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.reference-mutations button { flex: 1; margin-top: 0; font-size: 11px; }
+.remove-reference, .danger { color: #8b3530; border-color: #d1aaa4; }
+.remove-name { font-weight: 600; overflow-wrap: anywhere; }
+.remove-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 10px; }

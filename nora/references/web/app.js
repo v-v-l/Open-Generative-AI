@@ -21,7 +21,7 @@ let catalog = { records: [], missing: {}, collections: [] },
   busy = false,
   exportURL = null;
 let creating = false, uploading = false, uploadTarget = null, uploadFile = null, uploadPreviewURL = null, savedCollection = "";
-let uploadFiles = [], uploadResults = [];
+let uploadFiles = [], uploadResults = [], removing = false, removeTarget = null;
 const isVideo = (item) => item?.media_kind === "video";
 const memberIds = (collection) => collection.category === "lora" ? (collection.items || []) : (collection.slots || []).map((slot) => slot.reference_id);
 const slotLabels = {
@@ -145,6 +145,7 @@ function toggle(item) {
   else changeSelection([...selected, item.id]);
 }
 function showPreview(item) {
+  $("#preview").dataset.referenceId = item.id;
   $("#preview-playback-error").hidden = true;
   $("#preview-video").onerror = () => { $("#preview-playback-error").hidden = false; };
   $("#preview-image").hidden = isVideo(item);
@@ -260,13 +261,19 @@ function renderCards() {
     download.href = mediaURL(item, "download");
     download.download = "";
     body.append(choose, download);
-    const collection = item.libraryCollection || collectionInfo(item.collection);
+    const collection = item.libraryCollection || collectionInfo(item.collection_id || item.collection);
     const slot = item.librarySlot || collection?.slots?.find((value) => value.reference_id === item.id);
-    if (collection && slot && !collectionReadOnly(collection)) {
-      const replace = button("Загрузить другой кадр", () => openUpload(collection, slot), "Заменить фотографию: " + slot.title);
+    if (collection && !collectionReadOnly(collection)) {
+      const mutations = node("div", undefined, "reference-mutations");
+      const replace = button("Заменить", () => openUpload(collection, slot, null, item), "Заменить оригинал: " + (item.original_name || item.title || item.id));
       replace.className = "replace-reference";
-      replace.disabled = busy || uploading;
-      body.append(replace);
+      replace.disabled = busy || uploading || removing;
+      const remove = button("Удалить", () => openRemove(item, collection), "Удалить оригинал: " + (item.original_name || item.title || item.id));
+      remove.className = "remove-reference";
+      remove.disabled = busy || uploading || removing;
+      if (slot || (collection.category === "lora" && memberIds(collection).includes(item.id))) mutations.append(replace);
+      mutations.append(remove);
+      body.append(mutations);
     }
     card.append(picture, body);
     $("#cards").append(card);
@@ -547,7 +554,7 @@ function setUploadFiles(files) {
   uploadFile = uploadFiles[0] || null;
   uploadResults = uploadFiles.map(() => "Ожидает загрузки");
   let error = "";
-  if (!lora && uploadFiles.length !== 1) error = "На каждый ракурс выберите одну фотографию.";
+  if ((!lora || uploadTarget?.replacement) && uploadFiles.length !== 1) error = "Для одного ракурса или замены выберите один файл.";
   if (uploadFiles.length > 32) error = "За один раз можно загрузить до 32 оригиналов.";
   for (const file of uploadFiles) {
     const video = ["video/mp4", "video/webm", "video/quicktime"].includes(file.type);
@@ -571,20 +578,21 @@ function renderUploadFiles() {
   uploadFiles.forEach((file, index) => $("#upload-files").append(node("li", file.name + " · " + (uploadResults[index] || ""))));
 }
 function setUploadFile(file) { setUploadFiles(file ? [file] : []); }
-function openUpload(collection, slot = null, file = null) {
-  if (busy || uploading || collectionReadOnly(collection)) return;
+function openUpload(collection, slot = null, file = null, replacement = null) {
+  if (busy || uploading || removing || collectionReadOnly(collection)) return;
   const lora = collection.category === "lora";
-  uploadTarget = {collection, slot};
+  replacement = replacement || (slot?.reference_id ? record(slot.reference_id) : null);
+  uploadTarget = {collection, slot, replacement};
   uploadFile = null;
   uploadFiles = []; uploadResults = [];
   clearUploadPreview(); renderUploadFiles();
   $("#upload-input").value = "";
-  $("#upload-input").multiple = lora;
+  $("#upload-input").multiple = lora && !replacement;
   $("#upload-input").accept = "image/png,image/jpeg,image/webp" + (lora ? ",video/mp4,video/webm,video/quicktime,.mov" : "");
-  $("#upload-formats").textContent = lora ? "Фото PNG / JPEG / WebP до 40 МБ; видео MP4 / WebM / MOV до 100 МБ. Можно несколько файлов." : "PNG, JPEG или WebP · до 40 МБ";
-  $("#upload-title").textContent = lora ? "Фото и видео для LoRA" : slotTitle(collection, slot);
-  $("#upload-target").textContent = collection.title + (lora ? " · оригиналы добавятся в конец набора" : slot.reference_id ? " · загрузка нового кадра; прежний оригинал сохранится" : " · пустой ракурс");
-  $("#submit-upload").textContent = lora ? "Добавить оригиналы" : "Сохранить в этот ракурс";
+  $("#upload-formats").textContent = lora ? "Фото PNG / JPEG / WebP до 40 МБ; видео MP4 / WebM / MOV до 100 МБ. " + (replacement ? "Один файл для замены." : "Можно несколько файлов.") : "PNG, JPEG или WebP · до 40 МБ";
+  $("#upload-title").textContent = replacement ? "Заменить оригинал" : lora ? "Фото и видео для LoRA" : slotTitle(collection, slot);
+  $("#upload-target").textContent = collection.title + (replacement ? " · замена «" + (replacement.original_name || replacement.title || replacement.id) + "» на том же месте. Прежний файл будет скрыт из библиотеки и экспорта." : lora ? " · оригиналы добавятся в конец набора" : " · пустой ракурс");
+  $("#submit-upload").textContent = replacement ? "Заменить этим файлом" : lora ? "Добавить оригиналы" : "Сохранить в этот ракурс";
   $("#upload-progress").hidden = true;
   $("#upload-progress").value = 0;
   $("#submit-upload").disabled = true;
@@ -592,6 +600,41 @@ function openUpload(collection, slot = null, file = null) {
   $("#upload-reference").showModal();
   if (file) setUploadFile(file);
 }
+function openRemove(item, collection) {
+  if (busy || uploading || removing || collectionReadOnly(collection)) return;
+  removeTarget = {item, collection};
+  $("#remove-name").textContent = item.original_name || item.title || item.id;
+  $("#remove-id").textContent = collection.title + " · " + item.id;
+  formMessage("#remove-message", "");
+  $("#remove-reference").showModal();
+  $("#cancel-remove").focus();
+}
+$("#cancel-remove").onclick = () => $("#remove-reference").close();
+$("#remove-reference").addEventListener("cancel", (event) => { if (removing) event.preventDefault(); });
+$("#remove-reference-form").onsubmit = async (event) => {
+  event.preventDefault();
+  if (!removeTarget || removing || busy || uploading || collectionReadOnly(removeTarget.collection)) return;
+  removing = true;
+  $("#confirm-remove").disabled = true;
+  $("#cancel-remove").disabled = true;
+  formMessage("#remove-message", "Убираю оригинал из библиотеки…");
+  try {
+    await response("remove", {id: removeTarget.item.id});
+    if ($("#preview").dataset.referenceId === removeTarget.item.id) $("#preview").close();
+    selected = selected.filter((id) => id !== removeTarget.item.id);
+    saveSelection(); resetExport();
+    const loaded = await load({collectionId: removeTarget.collection.id});
+    $("#remove-reference").close();
+    message(loaded ? "Оригинал удалён из библиотеки, выбранных и экспорта. Его место можно заполнить заново." : "Оригинал удалён, но каталог не обновился. Нажмите «Обновить».", !loaded);
+  } catch (error) {
+    formMessage("#remove-message", "Не удалось удалить: " + error.message + ". Можно повторить.", true);
+  } finally {
+    removing = false;
+    $("#confirm-remove").disabled = false;
+    $("#cancel-remove").disabled = false;
+    renderCards(); renderSelection();
+  }
+};
 function readFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -746,7 +789,7 @@ $("#upload-reference").addEventListener("close", clearUploadPreview);
 $("#upload-reference-form").onsubmit = async (event) => {
   event.preventDefault();
   if (catalog.read_only) return formMessage("#upload-message", "Загрузка в этой копии отключена.", true);
-  if (uploading || !uploadFile || !uploadTarget) return;
+  if (uploading || !uploadFile || !uploadTarget || collectionReadOnly(uploadTarget.collection)) return;
   uploading = true;
   $("#submit-upload").disabled = true;
   $("#upload-input").disabled = true;
@@ -763,7 +806,14 @@ $("#upload-reference-form").onsubmit = async (event) => {
         const data = await readFile(file);
         const payload = {collection_id: uploadTarget.collection.id, name: file.name, mime: file.type, data};
         if (uploadTarget.slot) payload.slot_id = uploadTarget.slot.id;
-        await uploadRequest(payload);
+        if (uploadTarget.replacement) payload.replace_id = uploadTarget.replacement.id;
+        const uploaded = await uploadRequest(payload);
+        if (uploadTarget.replacement && uploaded.record?.id) {
+          selected = selected.map((id) => id === uploadTarget.replacement.id ? uploaded.record.id : id);
+          saveSelection();
+        }
+        resetExport();
+        if (uploadTarget.replacement && $("#preview").dataset.referenceId === uploadTarget.replacement.id) $("#preview").close();
         uploadResults[index] = "Сохранён";
       } catch (error) {
         if (error.uncertain) uploadFile = null;
@@ -777,7 +827,7 @@ $("#upload-reference-form").onsubmit = async (event) => {
     $("#search").value = "";
     const loaded = await load({collectionId: uploadTarget.collection.id});
     if (failed) formMessage("#upload-message", "Сохранено: " + uploadResults.filter((status) => status === "Сохранён").length + ". Проверьте ошибку у файла. " + (uploadFile ? "Повторная отправка пропустит сохранённые оригиналы." : "Статус отправки не подтверждён. Закройте окно и проверьте обновлённый набор перед повтором."), true);
-    else if (loaded) { uploadFiles = []; uploadFile = null; $("#upload-reference").close(); message("Оригиналы сохранены в набор «" + uploadTarget.collection.title + "». "); }
+    else if (loaded) { uploadFiles = []; uploadFile = null; $("#upload-reference").close(); message(uploadTarget.replacement ? "Оригинал заменён на том же месте в наборе. Прежний файл скрыт из библиотеки и экспорта." : "Оригиналы сохранены в набор «" + uploadTarget.collection.title + "»."); }
     else { uploadFile = null; formMessage("#upload-message", "Файлы сохранены, но каталог не обновился. Закройте окно и нажмите «Обновить».", true); }
   } finally {
     uploading = false;

@@ -34,6 +34,11 @@ The parameter modal edits a separate draft. Apply commits the supported settings
 together; Cancel/Escape/backdrop discard edits. Its field region scrolls within
 the viewport while Apply/Cancel remain reachable on mobile.
 
+User library uploads can be replaced in place or removed after confirmation.
+Removal clears active set/export membership while retaining a private archive;
+legacy read-only references remain protected. Studio attachments can likewise be
+replaced in place before enqueueing. These actions never trigger inference.
+
 Qwen-only executor readiness updates with state polling. Offline Qwen disables
 submission/retry while cloud/H3 remain usable; queued offline Qwen work waits for
 its executor without blocking eligible cloud jobs.

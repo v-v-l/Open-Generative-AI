@@ -220,3 +220,15 @@ code, type, parameter and request ID), which can explain future failures in the
 queue. Raw provider bodies, keys and inline reference data are not saved. Errors
 recorded before this change may have only a status code; missing explanations
 cannot be reconstructed or assumed to be a policy rejection.
+
+### Replacing and removing references
+
+Library user-upload cards offer **Заменить / Удалить** for photos and videos.
+Replacement preserves the slot/set/selection order; removal confirms the filename,
+clears active selection and restores an empty angle slot where appropriate. Original
+files remain in a private archive and are excluded from active downloads/exports.
+Legacy read-only sets remain protected. See the library manual for API behavior.
+
+Studio attachment cards also offer **Заменить**, retaining role and position.
+The current attachment stays until the upload succeeds; failure retains it.
+The existing × removes an attachment from the prompt. Neither action runs a model.

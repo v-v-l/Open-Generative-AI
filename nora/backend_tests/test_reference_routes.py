@@ -110,6 +110,33 @@ class ReferenceRoutes(unittest.TestCase):
         self.http.read_only=True
         self.denied('/references/api/uploads',403,payload=payload,cookie=cookie)
         self.denied('/references/api/collections',403,payload={'title':'No write','category':'lora'},cookie=cookie)
+        retained=self.http.reference_library.original_file(record['id'])['path']
+        self.http.read_only=False
+        with self.request('/references/api/remove',{'id':record['id']},cookie) as response:self.assertEqual(json.load(response)['removed_id'],record['id'])
+        self.assertEqual(retained.read_bytes(),raw)
+        self.denied(record['video_url'],404,cookie=cookie)
+        self.assertEqual(self.studio.db.execute('select count(*) from jobs').fetchone()[0],0)
+
+    def test_remove_and_replace_routes_require_auth_origin_and_active_membership(self):
+        cookie=self.login()
+        with self.request('/references/api/collections',{'title':'My face','category':'face'},cookie) as response:collection=json.load(response)['collection']
+        payload={'collection_id':collection['id'],'slot_id':'a000','name':'face.png','mime':'image/png','data':base64.b64encode((Path(self.tmp.name)/'red.png').read_bytes()).decode()}
+        with self.request('/references/api/uploads',payload,cookie) as response:first=json.load(response)['record']
+        self.denied('/references/api/remove',401,payload={'id':first['id']})
+        self.denied('/references/api/remove',403,payload={'id':first['id']},cookie=cookie,origin='https://evil.example')
+        self.denied('/references/api/remove',403,payload={'id':'H000'},cookie=cookie)
+        self.denied('/references/api/uploads',409,payload=payload,cookie=cookie)
+        payload['replace_id']=first['id']
+        with self.request('/references/api/uploads',payload,cookie) as response:second=json.load(response)['record']
+        self.denied(first['download_url'],404,cookie=cookie)
+        self.denied('/references/api/uploads',409,payload=payload,cookie=cookie)
+        self.http.read_only=True
+        self.denied('/references/api/remove',403,payload={'id':second['id']},cookie=cookie)
+        self.http.read_only=False
+        with self.request('/references/api/remove',{'id':second['id']},cookie) as response:self.assertEqual(json.load(response)['removed_id'],second['id'])
+        self.denied(second['image_url'],404,cookie=cookie)
+        self.denied(second['download_url'],404,cookie=cookie)
+        self.denied('/references/api/zip',404,payload={'ids':[second['id']]},cookie=cookie)
         self.assertEqual(self.studio.db.execute('select count(*) from jobs').fetchone()[0],0)
 
 if __name__=='__main__':unittest.main()

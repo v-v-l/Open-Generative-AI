@@ -22,6 +22,7 @@ import threading
 import warnings
 import zipfile
 import uuid
+import datetime as dt
 import subprocess
 import tempfile
 
@@ -200,7 +201,7 @@ class Library:
         return {'collection':copy.deepcopy(collection)}
 
     def upload_reference(self, payload):
-        if not isinstance(payload,dict) or set(payload)-{'collection_id','slot_id','name','mime','data'}:
+        if not isinstance(payload,dict) or set(payload)-{'collection_id','slot_id','name','mime','data','replace_id'}:
             raise LibraryError('Unsupported reference upload fields')
         name=payload.get('name');mime=payload.get('mime');encoded=payload.get('data')
         if not isinstance(name,str) or not name or len(name)>240 or '/' in name or '\\' in name or any(ord(c)<32 for c in name):
@@ -244,7 +245,7 @@ class Library:
         extension={**{v:k for k,v in FORMATS.items()},**{v:k for k,v in VIDEO_FORMATS.items()}}[mime]
         relative='uploads/'+identifier+extension
         with self._mutation():
-            if len(self.records)>=5000:
+            if len(self.metadata['records'])>=5000:
                 raise LibraryError('Reference image limit reached',413)
             data=copy.deepcopy(self.metadata)
             collection=next((item for item in data.get('collections',[]) if item['id']==payload.get('collection_id')),None)
@@ -258,13 +259,27 @@ class Library:
                 slot=next((item for item in collection['slots'] if item['id']==payload.get('slot_id')),None)
                 if slot is None:raise LibraryError('Unknown reference slot',404)
             previous=slot.get('reference_id')
+            replacement=payload.get('replace_id')
+            if replacement is not None and (not isinstance(replacement,str) or not ID.fullmatch(replacement)):
+                raise LibraryError('Invalid replacement reference')
+            if collection['category']=='lora':
+                if replacement is not None:
+                    self._owned_reference(data,replacement,collection['id'])
+                    previous=replacement
+            elif previous!=replacement:
+                raise LibraryError('This slot changed; reload before replacing it',409)
+            if previous:
+                old,_=self._owned_reference(data,previous,collection['id'])
+                self._archive(data,old,'replaced')
             record={'id':identifier,'path':relative,'category':collection['category'],'collection':collection['id'],
                     'collection_id':collection['id'],'slot_id':slot['id'],'title':slot['title'],'status':'user_supplied',
                     'source_kind':'individual','size':size,'sha256':hashlib.sha256(raw).hexdigest(),'original_name':name,
                     'mime':mime,'media_kind':'video' if video else 'image',**media_metadata,'tags':[],'parent_review':{'verdict':'user_supplied','user_approval':False}}
             if 'angle_degrees' in slot:record['angle_degrees']=slot['angle_degrees']
             data['records'].append(record)
-            if collection['category']=='lora':collection['items'].append(identifier)
+            if collection['category']=='lora':
+                if previous:collection['items'][collection['items'].index(previous)]=identifier
+                else:collection['items'].append(identifier)
             else:slot['reference_id']=identifier
             directory=self._path('uploads');directory.mkdir(exist_ok=True)
             target=self._path(relative)
@@ -279,6 +294,45 @@ class Library:
                 raise
             public=next(item for item in self.catalog()['records'] if item['id']==identifier)
             return {'collection':copy.deepcopy(collection),'record':public,'replaced_reference_id':previous}
+
+    @staticmethod
+    def _owned_reference(data, identifier, expected_collection=None, require_current=True):
+        record=next((record for record in data['records'] if record['id']==identifier),None)
+        if record is None or record.get('archived'):
+            raise LibraryError('Reference changed or is no longer active; reload the library',409)
+        collection=next((item for item in data.get('collections',[]) if item['id']==record.get('collection_id')),None)
+        if collection is None or collection.get('read_only'):
+            raise LibraryError('Legacy references cannot be replaced or removed',403)
+        if expected_collection is not None and collection['id']!=expected_collection:
+            raise LibraryError('Reference is not a current member of this set',409)
+        if collection['category']=='lora':
+            current=identifier in collection['items']
+        else:
+            current=any(slot.get('reference_id')==identifier and slot['id']==record.get('slot_id') for slot in collection['slots'])
+        if require_current and not current:raise LibraryError('Reference is not a current member of this set',409)
+        return record,collection
+
+    @staticmethod
+    def _archive(data, record, reason):
+        record.update(archived=True,archived_reason=reason,archived_at=dt.datetime.now(dt.timezone.utc).isoformat())
+        defaults=data.get('defaults')
+        if isinstance(defaults,dict):
+            data['defaults']={key:value for key,value in defaults.items() if value!=record['id']}
+
+    def remove_reference(self, payload):
+        if not isinstance(payload,dict) or set(payload)!={'id'} or not isinstance(payload['id'],str) or not ID.fullmatch(payload['id']):
+            raise LibraryError('Provide the ID of one reference to remove')
+        with self._mutation():
+            data=copy.deepcopy(self.metadata)
+            record,collection=self._owned_reference(data,payload['id'],require_current=False)
+            if collection['category']=='lora':
+                if record['id'] in collection['items']:collection['items'].remove(record['id'])
+            else:
+                for slot in collection['slots']:
+                    if slot.get('reference_id')==record['id']:slot['reference_id']=None
+            self._archive(data,record,'removed')
+            self._persist(data)
+            return {'removed_id':record['id'],'collection':copy.deepcopy(collection)}
 
     @staticmethod
     def _probe_video(raw, mime):
@@ -353,6 +407,8 @@ class Library:
                     identifier = record.get('id')
                     if not isinstance(identifier,str) or not ID.fullmatch(identifier) or identifier in records:
                         raise LibraryError('Reference manifest has an invalid or duplicate ID',503)
+                    if 'archived' in record and type(record['archived']) is not bool:
+                        raise LibraryError('Reference manifest has an invalid archive state',503)
                     if record.get('source_kind','individual') != 'individual':
                         raise LibraryError('Reference library accepts original individual photographs only',503)
                     if not isinstance(record.get('category'),str) or record['category'] not in CATEGORIES:
@@ -378,7 +434,7 @@ class Library:
                         raise LibraryError('Reference manifest has invalid slots',503)
                     if collection['category']=='lora':
                         items=collection.get('items',[])
-                        if slots or not isinstance(items,list) or len(items)>5000 or any(not isinstance(i,str) or i not in records for i in items) or len(set(items))!=len(items):
+                        if slots or not isinstance(items,list) or len(items)>5000 or any(not isinstance(i,str) or i not in records or records[i].get('archived') for i in items) or len(set(items))!=len(items):
                             raise LibraryError('Invalid LoRA dataset items',503)
                         seen.add(collection['id']);continue
                     try:
@@ -386,10 +442,10 @@ class Library:
                     except (LibraryError,AttributeError,TypeError):
                         raise LibraryError('Reference manifest has invalid slots',503) from None
                     for slot in slots:
-                        if slot.get('reference_id') is not None and slot.get('reference_id') not in records:
+                        if slot.get('reference_id') is not None and (slot.get('reference_id') not in records or records[slot['reference_id']].get('archived')):
                             raise LibraryError('Reference slot points to an unknown original',503)
                     seen.add(collection['id'])
-                self.records = records
+                self.records = {key:value for key,value in records.items() if not value.get('archived')}
                 self.metadata = data
                 self._stamp = stamp
             except (OSError,ValueError,TypeError) as exc:
@@ -439,7 +495,7 @@ class Library:
         records = []
         with self.lock:
             for identifier, record in self.records.items():
-                public = {key:_text(record[key]) for key in ('category','collection','collection_id','slot_id','title','status') if key in record}
+                public = {key:_text(record[key]) for key in ('category','collection','collection_id','slot_id','title','status','original_name') if key in record}
                 public['id'] = identifier
                 public['source_kind'] = 'individual'
                 media_kind='video' if Path(record['path']).suffix.lower() in VIDEO_FORMATS else 'image'

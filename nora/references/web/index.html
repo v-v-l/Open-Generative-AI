@@ -185,6 +185,17 @@
         <button id="submit-upload" class="primary" type="submit" disabled>Сохранить в этот ракурс</button>
       </form>
     </dialog>
+    <dialog id="remove-reference" aria-labelledby="remove-title">
+      <form id="remove-reference-form" class="library-form">
+        <div class="eyebrow">УДАЛИТЬ ОРИГИНАЛ</div>
+        <h2 id="remove-title">Удалить из библиотеки?</h2>
+        <p id="remove-name" class="remove-name"></p>
+        <p id="remove-id" class="hint"></p>
+        <p class="hint">Файл исчезнет из набора, просмотра, выбранных и экспорта. Сохранённый служебный оригинал останется в закрытом архиве. Можно загрузить новый файл на его место.</p>
+        <p id="remove-message" class="form-message" role="status" aria-live="polite"></p>
+        <div class="remove-actions"><button id="cancel-remove" type="button">Отмена</button><button id="confirm-remove" type="submit" class="danger">Удалить из библиотеки</button></div>
+      </form>
+    </dialog>
     <footer>
       Углы сгенерированных ракурсов номинальные. Статус «Кандидат» сохраняется
       при выборе и экспорте. Пустые ракурсы заполняются вашими фотографиями.

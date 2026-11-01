@@ -6,6 +6,8 @@ preserved separately in the original README below the fork notice.
 ## [Unreleased]
 
 ### Added
+- Replace or remove user-uploaded photo/video references while preserving set positions and private originals.
+- Replace studio attachments in place without losing the current file on upload failure.
 - Curate named LoRA photo/video sets with batch uploads, playback, original downloads and mixed ZIP exports; no training is launched.
 - Collapse/expand the photo and video prompt panel while retaining its draft, files and settings.
 - Choose random or fixed seeds explicitly for supported models; inspect the saved seed in the queue.

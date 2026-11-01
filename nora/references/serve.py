@@ -66,8 +66,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed():return self.json({'error':'Same-origin loopback access required'},403)
         route=urlsplit(self.path).path
-        if getattr(self.server,'read_only',False) and route in ('/references/api/collections','/references/api/uploads'):return self.json({'error':'Reference preview is read-only'},403)
-        if route not in ('/references/api/export','/references/api/zip','/references/api/collections','/references/api/uploads'):return self.json({'error':'No generation operations exist in this library'},404)
+        if getattr(self.server,'read_only',False) and route in ('/references/api/collections','/references/api/uploads','/references/api/remove'):return self.json({'error':'Reference preview is read-only'},403)
+        if route not in ('/references/api/export','/references/api/zip','/references/api/collections','/references/api/uploads','/references/api/remove'):return self.json({'error':'No generation operations exist in this library'},404)
         if not EXPORT_LOCK.acquire(blocking=False):return self.json({'error':'Another export is running'},429)
         try:
             length=int(self.headers.get('Content-Length','0'))
@@ -76,6 +76,7 @@ class Handler(BaseHTTPRequestHandler):
             payload=json.loads(self.rfile.read(length));library=self.server.library
             if route.endswith('/collections'):return self.json(library.create_collection(payload),201)
             if route.endswith('/uploads'):return self.json(library.upload_reference(payload),201)
+            if route.endswith('/remove'):return self.json(library.remove_reference(payload))
             result=library.export_sheet(payload) if route.endswith('/export') else library.export_zip(payload)
             return self.binary(result['bytes'],result['kind'],result['filename'])
         except LibraryError as error:return self.json({'error':str(error)},error.status)
