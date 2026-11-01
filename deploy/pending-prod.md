@@ -71,3 +71,37 @@ FFmpeg binaries came from `mwader/static-ffmpeg:8.0.1`, pinned image digest
 `sha256:252705ff88532fa338e7065c21792756552f8fe7c212f84bc503d3c340689594`.
 Evidence stays outside Git: `work/media-migration-{offline,ready}.json`,
 `work/media-public-smoke.json`, and the matching private candidate receipt.
+
+
+## Promoted — 2026-11-01: reference-only library
+
+Release `nora-v3-4ed9267`, source `4ed9267`. Runtime backend and private proxy
+activated; gateway route unchanged.
+
+- [x] `/references/` shares the studio session; navigation link added to main studio.
+- [x] NORA_REFERENCE_ROOT points to apps runtime/reference-library/v1, outside Git.
+- [x] Imported28 individual originals with source hash checks, including8 nominal
+  head angles. No former delivery crops, automatic approval or new generation.
+- [x] Protected catalog/images/static/downloads; private provenance returns404.
+- [x] Ordered PNG sheet4x2/2048x1536 and ZIP8 tested through authenticated public
+  browser. Every ZIP original matches its source hash. No crop or AI operation.
+- [x] Existing6 completed jobs preserved; reference browser actions added0 jobs.
+- [x] Local workflow-preparation server retired; optional launcher now serves only
+  the reference-only preview. Source images and historical outputs retained.
+
+Validation:65 backend tests (four PostgreSQL-only tests skipped), frontend checks/
+tests/build, actual reference browser exports, mobile layout and expanded private
+proxy negative gate passed. Additional activation-preflight regression and five
+deployment preparation tests passed after adding the fail-fast backend helper.
+
+Operational correction: the first manual activation command incorrectly continued
+past a failed paused-queue guard. The backend restarted with no running/queued job;
+all6 jobs were completed, none interrupted. The queue remains paused after update.
+The new `activate-apps-backend.sh` uses one fail-fast SSH transaction; tests prove
+an unpaused or unfinished queue neither switches source nor restarts a service.
+
+Evidence outside Git: work/reference-public-verification.json,
+work/reference-gallery-validation.json, work/reference-library-public.png,
+and the matching private candidate receipt. Example public exports are in the
+Nora workspace outputs/reference-library/. No paid inference was performed by
+library implementation or verification.

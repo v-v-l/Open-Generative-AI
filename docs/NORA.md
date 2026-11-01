@@ -104,3 +104,11 @@ The private studio is available at https://media.bp-flow.com. Release and
 verification records are in [the deployment ledger](../deploy/pending-prod.md);
 [data flow](diagrams/data-flow.md), [queue schema](diagrams/schema.md) and
 [user journey](diagrams/user-journey.md) describe the integration boundaries.
+
+## Reference library
+
+Open [/references/](https://media.bp-flow.com/references/) with the same login.
+Browse/download originals and export an ordered photo set as a PNG sheet or ZIP.
+No model, prompt, seed, queue or workflow controls exist in this library. See
+[reference library manual](../nora/references/README.md). Source originals and
+provenance stay in private versioned apps storage outside Git.

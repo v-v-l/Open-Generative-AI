@@ -5,6 +5,14 @@ preserved separately in the original README below the fork notice.
 
 ## [Unreleased]
 
+## [Nora 0.3.0] - 2026-11-01
+
+- Added the private reference-only library at /references/ with shared login.
+- Added ordered selection, whole-collection selection, no-crop PNG sheets, original downloads and byte-exact ZIP exports.
+- Preserved candidate/review statuses and nominal angle metadata; moved 28 originals to private apps storage.
+- Retired local workflow preparation from the reference site.
+- Added fail-fast backend activation: rejected queue preflight cannot switch source or restart the service.
+
 ## [Nora 0.2.0] - 2026-11-01
 
 - Moved authentication, API, queue, media storage and cloud/H3 control to apps.

@@ -124,8 +124,11 @@ own executor and tunnel, with separate ports and credentials.
 
 Fetch/merge upstream through the fork's `scripts/nora-update.py`; it uses an isolated
 worktree and never promotes automatically. Build/test a new immutable release.
-Pause/drain the queue before switching `current` and restarting the apps backend;
-then verify and activate the frontend release. Runtime credentials, media, database
+Use `activate-apps-backend.sh RELEASE_ID` after pausing/draining the queue. It
+checks hashes and PostgreSQL state before any mutation in one fail-fast SSH
+transaction, switches `current`, restarts the backend, and restores previous source
+on failed authentication readiness. A rejected preflight performs no restart.
+Then verify and activate the frontend release. Runtime credentials, media, database
 and worker state are not overwritten. Future schema changes need explicit compatible
 migrations before source promotion.
 
@@ -150,3 +153,10 @@ must use `</dev/null` so they cannot consume subsequent shell commands.
 
 Deployment validation never submits paid inference. Estimates remain estimates;
 unknown charges stay unknown, and explicit max_cost_usd requires a reliable quote.
+
+## Reference-only library
+
+`/references/` uses the same login. Set NORA_REFERENCE_ROOT to the private versioned
+reference inventory on apps. Browsing, original/ZIP downloads and deterministic
+PNG sheet composition make no model or queue calls. See `../references/README.md`
+for the inventory importer, export limits and optional local preview.
