@@ -74,14 +74,11 @@ private candidate access gate, then activate that release. Reuse the existing
 gateway route; the gateway helper is for initial site creation and deliberately
 refuses to append a duplicate site.
 
-For a backend update, pause and drain active work first. Stop the backend before
-fast-forwarding its checked-out source so one process cannot mix old Python
-modules with new templates. Then restart `nora-media-backend.service`, verify
-public authentication and the paused queue, and keep the SSH tunnel running.
-`activate-laptop.sh` performs the initial handover and deliberately refuses an
-implicit restart of an already active public backend. Backend rollback uses the
-same idle-work guard, the previous source commit and a service restart; it never
-rolls back the external SQLite database.
+For a backend update, pause and drain active work first. Stage a new immutable
+release on apps, stop `nora-media-apps-backend.service`, switch the `current`
+symlink, then restart that service and verify authentication/paused queue. Keep
+the previous release for rollback; PostgreSQL and media are not rolled back with
+application code. The legacy `activate-laptop.sh` is not used for this topology.
 
 Refresh provider models/prices separately through the explicit catalog-refresh
 operation after queued/running work is finished or cancelled. Refresh is blocked
@@ -91,10 +88,15 @@ paid generation. Costs computed from token rates are not provider invoices.
 
 ## Hosting
 
-The initial private bridge keeps backend execution on the existing Nora host and
-serves the frontend on apps, routed by gateway at `media.bp-flow.com`. The studio
-needs that host online; Qwen and GPU worker keys are not copied into a public web
-container. No ComfyUI endpoint or reference file is exposed without studio auth.
+The frontend, authentication, backend, queue, media and cloud/H3 control run on
+apps; PostgreSQL runs on databases. Only local Qwen needs the workstation online.
+The workstation establishes an outgoing private SSH reverse tunnel to apps. The
+server sends authenticated Qwen-only HTTP jobs through it to the local executor,
+which submits the maintained workflow to loopback ComfyUI. No public ComfyUI
+endpoint, generic remote shell or browser-side provider key is required.
+
+Workstation reboot/autostart and service checks are documented in
+[the deployment manual](../nora/deploy/README.md#workstation-reboot-and-local-execution).
 
 ## Verified deployment
 

@@ -42,6 +42,39 @@ loopback Host. The public Host and authentication guards apply on loopback too.
 Sessions are Secure/HttpOnly/SameSite=Strict; static authentication runs before file
 serving, and API/media require login. Backend restart requires logging in again.
 
+## Workstation reboot and local execution
+
+Verified 2026-11-01: these user services are enabled and active:
+
+- `nora-comfy-photos.service`: existing local ComfyUI on loopback 8190.
+- `nora-qwen-executor.service`: authenticated Qwen-only executor on loopback 36446.
+- `nora-qwen-bridge.service`: outgoing SSH connection to apps, exposing only apps
+  loopback 36447 → workstation loopback 36446. The bridge retries after disconnect.
+
+Workstation `loginctl show-user victor -p Linger` reports `Linger=yes`. Services
+start after boot without a desktop login or manual command. The machine must be
+powered on with network connectivity; the server does not power it on remotely.
+Service configuration was checked live; a physical reboot was not part of testing.
+
+The server owns the queue and sends a bounded authenticated photo job through
+this tunnel. The local executor starts the Comfy workflow and returns images to
+apps. Weights load when needed, so the first inference after boot can take longer.
+When disconnected, only Qwen becomes unavailable; cloud/H3 continue independently.
+A restart during inference preserves interruption evidence and does not silently
+resubmit the job. Inspect interrupted work before an explicit retry.
+
+Diagnostic commands on the workstation:
+
+```bash
+systemctl --user status nora-comfy-photos.service nora-qwen-executor.service nora-qwen-bridge.service
+loginctl show-user victor -p Linger
+journalctl --user -u nora-qwen-executor.service -u nora-qwen-bridge.service -n 50
+```
+
+Executor unit source: `nora/backend/runtime/nora-qwen-executor.service`; tunnel
+unit: `nora/deploy/nora-qwen-bridge.service`. The existing ComfyUI installation and
+its unit remain workstation runtime dependencies, separate from the hosted app.
+
 ## Database
 
 `databases/compose.yml` provisions only `pg_nora_media_prod`, its own persistent
