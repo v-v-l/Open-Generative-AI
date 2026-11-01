@@ -150,3 +150,22 @@ prompt. Production job count stayed6; no library test sets or paid calls created
 Reference create dialogs exposed8 face slots and4 clothing slots, and upload support
 was reported available. Private candidate gate repeated successfully for the
 frontend-only follow-up; final auth/model-selector smoke evidence is external.
+
+## Promoted — 2026-11-01: collapsible composers and model-aware references
+
+Frontend release `nora-v4c-composer`, source `e61adca`.
+
+- [x] Staged immutable bundle and passed private candidate authentication/Host/peer negative gate.
+- [x] Activated frontend only; backend service, database, queue and executor unchanged.
+- [x] Photo/video prompt panels collapse to a compact restore bar without unmounting drafts, files, settings or upload controls.
+- [x] Replaced legacy model-switch reference clearing with verified capability reconciliation; compatible frames survive and excluded references have a visible notice.
+- [x] Mocked transport checks cover all three Veo variants, exact frame pixels/dimensions/order, unsupported roles and first-frame-only model validation.
+- [x] Frontend check/typecheck/unit/build and actual isolated browser regressions passed, including pending upload, seed/width, keyboard and mobile preservation.
+- [x] Public smoke verified both panels shrink from350px to56.5px, drafts survive, Veo exposes Start/End only, mobile has no overflow and restore is visible. Production jobs remained9 before/after; no page errors or paid calls.
+
+Evidence outside Git: work/studio-video-capability-review.json,
+work/studio-collapse-validation.json, work/studio-collapse-payloads.json,
+work/studio-public-composer-verification.json and matching screenshots.
+No migrations, secrets, infrastructure or route changes. Existing diagrams remain
+valid: this update changes composer presentation and attachment reconciliation,
+not the service topology, queue schema or generation journey.
