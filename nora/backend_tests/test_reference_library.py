@@ -1,5 +1,7 @@
 """Reference exports preserve originals, framing and selection without inference."""
 import io
+import base64
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -7,6 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
+import concurrent.futures
 
 from PIL import Image
 
@@ -122,6 +125,112 @@ class ReferenceLibraryTest(unittest.TestCase):
         with self.assertRaises(refs.LibraryError) as error:refs.Library(self.root/'missing')
         self.assertEqual(error.exception.status,503)
         self.assertNotIn(str(self.root),str(error.exception))
+
+    def upload(self, collection, slot='a000', **changes):
+        raw=(self.root/'images/H000.png').read_bytes()
+        payload={'collection_id':collection['id'],'slot_id':slot,'name':'original.png','mime':'image/png','data':base64.b64encode(raw).decode()}
+        payload.update(changes)
+        return self.library.upload_reference(payload)
+
+    def test_create_sets_persists_empty_slots_and_preserves_legacy(self):
+        original_records=json.loads((self.root/'manifest.json').read_text())['records']
+        for category,count in [('face',8),('body',8),('outfit',4),('scene',4)]:
+            collection=self.library.create_collection({'title':'My '+category,'category':category})['collection']
+            self.assertEqual(len(collection['slots']),count)
+            self.assertTrue(all(slot['reference_id'] is None for slot in collection['slots']))
+            if category in ('face','body'):
+                self.assertEqual([s['angle_degrees'] for s in collection['slots']],list(range(0,360,45)))
+        reopened=refs.Library(self.root)
+        self.assertEqual(len([c for c in reopened.catalog()['collections'] if not c['read_only']]),4)
+        self.assertEqual(json.loads((self.root/'manifest.json').read_text())['records'],original_records)
+
+    def test_upload_is_exact_unreviewed_and_replacement_retains_original(self):
+        collection=self.library.create_collection({'title':'Alice face','category':'face'})['collection']
+        raw=(self.root/'images/H000.png').read_bytes()
+        first=self.upload(collection)
+        record=first['record']
+        self.assertEqual(record['status'],'user_supplied')
+        self.assertEqual(record['source_kind'],'individual')
+        self.assertFalse(record['parent_review']['user_approval'])
+        self.assertEqual(record['sha256'],hashlib.sha256(raw).hexdigest())
+        self.assertEqual(self.library.original(record['id'])['bytes'],raw)
+        self.assertIsNone(first['replaced_reference_id'])
+        second=self.upload(collection)
+        self.assertNotEqual(second['record']['id'],record['id'])
+        self.assertEqual(second['replaced_reference_id'],record['id'])
+        self.assertEqual(second['collection']['slots'][0]['reference_id'],second['record']['id'])
+        self.assertEqual(self.library.original(record['id'])['bytes'],raw)
+        catalog=refs.Library(self.root).catalog()
+        saved=next(c for c in catalog['collections'] if c['id']==collection['id'])
+        self.assertEqual(saved['slots'][0]['reference_id'],second['record']['id'])
+        self.assertEqual(len(catalog['records']),4)
+
+    def test_rejects_upload_mime_paths_bad_data_unknown_slot_and_oversize_before_decode(self):
+        collection=self.library.create_collection({'title':'Alice body','category':'body'})['collection']
+        for changes in ({'mime':'image/svg+xml'},{'mime':'image/jpeg'}, {'name':'../original.png'}, {'name':'C:\\image.png'},
+                        {'data':'invalid base64!'}, {'slot_id':'unknown'}, {'collection_id':'legacy-head360'}):
+            with self.assertRaises(refs.LibraryError):self.upload(collection,**changes)
+        with patch.object(refs,'MAX_UPLOAD_BYTES',3),patch.object(refs.base64,'b64decode',side_effect=AssertionError('must not decode')):
+            with self.assertRaises(refs.LibraryError) as error:self.upload(collection)
+            self.assertEqual(error.exception.status,413)
+        self.assertEqual(len(self.library.catalog()['records']),2)
+
+    def test_concurrent_library_instances_do_not_lose_sets_or_uploads(self):
+        first=refs.Library(self.root);second=refs.Library(self.root)
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:
+            results=list(pool.map(lambda args:args[0].create_collection({'title':args[1],'category':'face'}),[(first,'One'),(second,'Two')]))
+        self.assertEqual(len([c for c in self.library.catalog()['collections'] if not c['read_only']]),2)
+        collection=results[0]['collection']
+        raw=(self.root/'images/H000.png').read_bytes()
+        def submit(args):
+            library,slot=args
+            return library.upload_reference({'collection_id':collection['id'],'slot_id':slot,'name':'a.png','mime':'image/png','data':base64.b64encode(raw).decode()})
+        with concurrent.futures.ThreadPoolExecutor(2) as pool:uploads=list(pool.map(submit,[(first,'a000'),(second,'a045')]))
+        saved=next(c for c in self.library.catalog()['collections'] if c['id']==collection['id'])
+        self.assertEqual([s['reference_id'] for s in saved['slots'][:2]],[u['record']['id'] for u in uploads])
+
+    def test_manifest_replace_failure_preserves_prior_state_and_originals(self):
+        collection=self.library.create_collection({'title':'Alice face','category':'face'})['collection']
+        before=(self.root/'manifest.json').read_bytes()
+        with patch.object(refs.os,'replace',side_effect=OSError('storage unavailable')):
+            with self.assertRaises(refs.LibraryError) as error:self.upload(collection)
+            self.assertEqual(error.exception.status,503)
+        self.assertEqual((self.root/'manifest.json').read_bytes(),before)
+        self.assertEqual(len(refs.Library(self.root).catalog()['records']),2)
+        self.assertEqual(self.library.original('H000')['bytes'],(self.root/'images/H000.png').read_bytes())
+
+    def test_upload_directory_symlink_escape_cannot_write_outside_root(self):
+        collection=self.library.create_collection({'title':'Alice face','category':'face'})['collection']
+        with tempfile.TemporaryDirectory() as outside:
+            (self.root/'uploads').symlink_to(outside,target_is_directory=True)
+            with self.assertRaises(refs.LibraryError):self.upload(collection)
+            self.assertEqual(list(Path(outside).iterdir()),[])
+
+    def test_custom_outfit_slots_and_invalid_collection_inputs(self):
+        result=self.library.create_collection({'title':'Dress','category':'outfit','slots':[{'id':'back','title':'Open back'},{'id':'hem','title':'Hem detail'}]})
+        self.assertEqual([s['id'] for s in result['collection']['slots']],['back','hem'])
+        for payload in ({'title':'Bad','category':[]},{'title':'','category':'face'},
+                        {'title':'Bad','category':'face','slots':[{'id':'../x','title':'No'}]},
+                        {'title':'Bad','category':'face','slots':[{'id':'same'},{'id':'same'}]}):
+            with self.assertRaises(refs.LibraryError):self.library.create_collection(payload)
+
+    def test_phone_jpeg_orientation_is_visible_but_original_bytes_unchanged(self):
+        image=Image.new('RGB',(40,80),'red')
+        exif=Image.Exif();exif[274]=6
+        buffer=io.BytesIO();image.save(buffer,format='JPEG',exif=exif,quality=95)
+        raw=buffer.getvalue()
+        collection=self.library.create_collection({'title':'Phone originals','category':'body'})['collection']
+        result=self.upload(collection,name='phone.jpg',mime='image/jpeg',data=base64.b64encode(raw).decode())
+        identifier=result['record']['id']
+        self.assertEqual(result['record']['size'],[80,40])
+        self.assertEqual(self.library.original(identifier)['bytes'],raw)
+        with Image.open(io.BytesIO(self.library.thumbnail(identifier,size=80)['bytes'])) as thumb:
+            self.assertEqual(thumb.size,(80,40))
+        sheet=self.library.export_sheet({'ids':[identifier],'columns':1,'cell_width':80,'cell_height':80})
+        with Image.open(io.BytesIO(sheet['bytes'])) as composed:
+            self.assertEqual(composed.getpixel((40,0)),(255,255,255))
+            self.assertGreater(composed.getpixel((0,40))[0],240)
+            self.assertLess(composed.getpixel((0,40))[1],10)
 
 
 if __name__=='__main__':unittest.main()

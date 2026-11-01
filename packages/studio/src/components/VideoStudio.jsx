@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
-import { NoraSummary } from "@nora/ui";
-import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable } from "@nora/runtime";
+import { NoraSummary, NoraAttachments, noraReferenceInputs } from "@nora/ui";
+import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateVideo, generateI2V, processV2V, uploadFile } from "../muapi.js";
 import { formatErrorMessage } from "../utils/formatError.js";
@@ -2179,13 +2179,16 @@ export default function VideoStudio({
 
     try {
       let res;
-      const referenceParams = selectedWorkflowId
+      const referenceParams = {
+        ...(selectedWorkflowId
         ? buildVideoWorkflowMediaParams(
             currentModel,
             selectedWorkflowId,
             workflowMedia,
           )
-        : buildReferenceParams(currentModel, workflowMedia);
+        : buildReferenceParams(currentModel, workflowMedia)),
+        ...noraReferenceInputs(selectedModel, {imageUrls:uploadedImageUrls,endImageUrl:uploadedEndImageUrl,videoUrls:uploadedVideoUrls,audioUrls:uploadedAudioUrls}),
+      };
 
       if (v2vMode) {
         // V2V: dedicated processV2V handles single-input tools (e.g. watermark
@@ -2683,204 +2686,12 @@ export default function VideoStudio({
       {/* ── BOTTOM PROMPT BAR ── */}
       <PromptComposer>
           <div className="flex flex-col gap-3">
-            {/* Inline list of uploaded media files */}
-            <div className="flex items-start gap-2.5 flex-wrap">
-              {selectedWorkflowId ? (
-                <>
-                  {workflowMediaSlots.flatMap((slot) => {
-                    const values = activeWorkflowMediaDraft?.[slot.id] || [];
-                    return values.map((url, index) => (
-                      <ReferencePreview
-                        copy={copy}
-                        key={`${slot.id}:${index}:${url}`}
-                        type={slot.mediaType}
-                        url={url}
-                        index={index}
-                        onRemove={(itemIndex) =>
-                          removeWorkflowMedia(slot.id, itemIndex)
-                        }
-                        label={
-                          values.length > 1
-                            ? `${slot.label} · ${index + 1}`
-                            : slot.label
-                        }
-                        description={
-                          values.length > 1
-                            ? `${slot.description} ${index + 1}`
-                            : slot.description
-                        }
-                      />
-                    ));
-                  })}
-
-                  {workflowMediaSlots.map((slot) => {
-                    const values = activeWorkflowMediaDraft?.[slot.id] || [];
-                    const remaining = getVideoWorkflowSlotRemaining(
-                      slot,
-                      activeWorkflowMediaDraft,
-                    );
-                    if (remaining <= 0) return null;
-                    const uploadKey = `${workflowMediaDraftKey}:${slot.id}`;
-                    const uploading = workflowUploadSlotId === uploadKey;
-                    const progress = slot.mediaType === "image"
-                      ? imageProgress
-                      : slot.mediaType === "video"
-                        ? videoProgress
-                        : audioProgress;
-                    return (
-                      <ReferenceUploadButton
-                  copy={copy}
-                        key={slot.id}
-                        accept={`${slot.mediaType}/*`}
-                        multiple={remaining > 1}
-                        onChange={async (event) => {
-                          const files = Array.from(event.target.files || []);
-                          event.target.value = "";
-                          await uploadWorkflowSlotFiles(
-                            workflowMediaDraftKey,
-                            slot,
-                            files,
-                          );
-                        }}
-                        title={`${slot.description || slot.label}${slot.required ? " (required)" : " (optional)"}`}
-                        uploading={uploading}
-                        progress={progress}
-                        type={slot.mediaType}
-                        label={slot.label}
-                        required={slot.required}
-                        disabled={Boolean(workflowUploadSlotId)}
-                      />
-                    );
-                  })}
-                </>
-              ) : (
-                <>
-              {uploadedImageUrls.map((url, index) => (
-                <ReferencePreview
-                        copy={copy}
-                  key={url}
-                  type="image"
-                  url={url}
-                  index={index}
-                  onRemove={removeImageAtIndex}
-                  label={
-                    uploadedImageUrls.length > 1
-                      ? `${copy.media.image} · ${index + 1}`
-                      : copy.media.image
-                  }
-                />
-              ))}
-
-              {uploadedEndImageUrl && (
-                <ReferencePreview
-                        copy={copy}
-                  type="image"
-                  url={uploadedEndImageUrl}
-                  index={0}
-                  onRemove={clearEndImage}
-                  label={copy.media.endFrame}
-                />
-              )}
-
-              {uploadedVideoUrls.map((url, index) => (
-                <ReferencePreview
-                        copy={copy}
-                  key={url}
-                  type="video"
-                  url={url}
-                  index={index}
-                  onRemove={removeVideoAtIndex}
-                  label={
-                    uploadedVideoUrls.length > 1
-                      ? `${copy.media.video} · ${index + 1}`
-                      : copy.media.video
-                  }
-                />
-              ))}
-
-              {uploadedAudioUrls.map((url, index) => (
-                <ReferencePreview
-                        copy={copy}
-                  key={url}
-                  type="audio"
-                  url={url}
-                  index={index}
-                  onRemove={removeAudioAtIndex}
-                  label={
-                    uploadedAudioUrls.length > 1
-                      ? `${copy.media.audio} · ${index + 1}`
-                      : copy.media.audio
-                  }
-                />
-              ))}
-
-              {/* Upload trigger buttons */}
-              {canUploadImageReference && uploadedImageUrls.length < imageUploadLimit && (
-                <ReferenceUploadButton
-                  copy={copy}
-                  inputRef={imageFileInputRef}
-                  accept="image/*"
-                  multiple={imageUploadLimit - uploadedImageUrls.length > 1}
-                  onChange={handleImageFileChange}
-                  onClick={() => imageFileInputRef.current?.click()}
-                  title={
-                    selectedWorkflowId === "keyframes"
-                      ? copy.upload.uploadStartFrame
-                      : copy.upload.uploadUpToReferenceImages.replace('{count}', imageUploadLimit)
-                  }
-                  uploading={imageUploading}
-                  progress={imageProgress}
-                  type="image"
-                />
-              )}
-
-              {showEndImageUpload && !uploadedEndImageUrl && (
-                <ReferenceUploadButton
-                  copy={copy}
-                  inputRef={endImageFileInputRef}
-                  accept="image/*"
-                  multiple={false}
-                  onChange={handleEndImageFileChange}
-                  onClick={() => endImageFileInputRef.current?.click()}
-                  title={copy.upload.uploadEndFrame}
-                  uploading={endImageUploading}
-                  progress={endImageProgress}
-                  type="image"
-                />
-              )}
-
-              {videoUploadLimit > 0 && uploadedVideoUrls.length < videoUploadLimit && (
-                <ReferenceUploadButton
-                  copy={copy}
-                  inputRef={videoFileInputRef}
-                  accept="video/*"
-                  multiple={videoUploadLimit - uploadedVideoUrls.length > 1}
-                  onChange={handleVideoFileChange}
-                  onClick={() => videoFileInputRef.current?.click()}
-                  title={`Upload up to ${videoUploadLimit} reference videos`}
-                  uploading={videoUploading}
-                  progress={videoProgress}
-                  type="video"
-                />
-              )}
-
-              {audioUploadLimit > 0 && uploadedAudioUrls.length < audioUploadLimit && (
-                <ReferenceUploadButton
-                  copy={copy}
-                  inputRef={audioFileInputRef}
-                  accept="audio/*"
-                  multiple={audioUploadLimit - uploadedAudioUrls.length > 1}
-                  onChange={handleAudioFileChange}
-                  onClick={() => audioFileInputRef.current?.click()}
-                  title={`Upload up to ${audioUploadLimit} reference audio files`}
-                  uploading={audioUploading}
-                  progress={audioProgress}
-                  type="audio"
-                />
-              )}
-                </>
-              )}
-            </div>
+            <NoraAttachments modelId={selectedModel} imageUrls={uploadedImageUrls} endImageUrl={uploadedEndImageUrl} videoUrls={uploadedVideoUrls} audioUrls={uploadedAudioUrls} onChange={(role, urls) => {
+              if (role === "start" || role === "image") setUploadedImageUrls(urls);
+              else if (role === "end") setUploadedEndImageUrl(urls[0] || null);
+              else if (role === "video") setUploadedVideoUrls(urls);
+              else if (role === "audio") setUploadedAudioUrls(urls);
+            }} />
 
             {/* Prompt textarea */}
             <div className="flex-1 flex flex-col gap-1">
@@ -2945,12 +2756,12 @@ export default function VideoStudio({
           )}
 
           {/* Bottom row: controls + generate */}
-          <NoraSummary params={{model:selectedModel,prompt,...modelParameterValues,aspect_ratio:selectedAr,duration:selectedDuration,resolution:selectedResolution,quality:selectedQuality,...buildReferenceParams(currentModelObj,{imageUrls:uploadedImageUrls,endImageUrl:uploadedEndImageUrl,videoUrls:uploadedVideoUrls,audioUrls:uploadedAudioUrls})}} />
+          <NoraSummary params={{model:selectedModel,prompt,...modelParameterValues,aspect_ratio:selectedAr,duration:selectedDuration,resolution:selectedResolution,quality:selectedQuality,...noraReferenceInputs(selectedModel,{imageUrls:uploadedImageUrls,endImageUrl:uploadedEndImageUrl,videoUrls:uploadedVideoUrls,audioUrls:uploadedAudioUrls})}} />
           <PromptFooter>
             <PromptControls ref={dropdownRef}>
               {/* Model btn */}
               <div className="relative">
-                <button
+                <button disabled={noraIsUploading(selectedModel)}
                   type="button"
                   onClick={toggleDropdown("model")}
                   className={promptControlClassName({
@@ -3403,7 +3214,7 @@ export default function VideoStudio({
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={noraReadOnly() || noraModelUnavailable(selectedModel) || generating || mediaUploading || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
+              disabled={noraReadOnly() || noraModelUnavailable(selectedModel) || noraIsUploading(selectedModel) || generating || mediaUploading || (selectedTool?.group === "continueGenerated" && !hasContinuationSource) || (selectedVeoTool && !selectedVeoSource)}
             >
               {generating ? (
                 <>

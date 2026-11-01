@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy an explicit legacy reference inventory into a portable read-only library."""
+"""Copy an explicit legacy reference inventory into a portable reference library."""
 import argparse
 import hashlib
 import json
@@ -37,7 +37,7 @@ def migrate(source, destination):
         for path, metadata in prepared:
             shutil.copyfile(path, destination/metadata['path'])
         payload = {'version':1,'character':data.get('character','References'),
-                   'policy':'Browse/download original reference photos and compose sheets only; no inference or training promotion.',
+                   'policy':'Organize and upload reference photographs; download originals and export sheets; no inference or automatic training promotion.',
                    'records':[metadata for _,metadata in prepared], 'missing':data.get('missing',{})}
         (destination/'manifest.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n')
         # Private provenance is preserved separately, not exposed by the catalog API.

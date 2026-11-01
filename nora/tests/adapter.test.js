@@ -117,3 +117,62 @@ test("dynamic catalog does not expose edit-only models as text-only", () => {
   assert.equal(registry.i2iModels.length, 2);
   assert.equal(registry.v2vModels.length, 0);
 });
+test("empty alias arrays do not mask actual photo or multimodal references", () => {
+  runtime.extraAssets = {};
+  assert.deepEqual(
+    buildWith(photo, {
+      images_list: [],
+      image_urls: ["/media/" + image, "/media/" + start],
+    }).assets,
+    [
+      { id: image, role: "image" },
+      { id: start, role: "image" },
+    ],
+  );
+  const refs = buildWith(h3, {
+    videos_list: [],
+    video_url: "/media/" + video,
+    audios_list: [],
+    audio_url: "/media/" + audio,
+  }).assets;
+  assert.deepEqual(refs, [
+    { id: video, role: "video" },
+    { id: audio, role: "audio" },
+  ]);
+});
+function buildWith(model, params) {
+  runtime.descriptors = [model];
+  return buildJob({ model: model.id, prompt: "Literal prompt", ...params });
+}
+test("explicit image placeholders require actual committed files without rewriting prompt", () => {
+  assert.throws(
+    () => buildWith(photo, { prompt: "  Apply <image1>  ", images_list: [] }),
+    /Image1.*фото: 0/,
+  );
+  assert.throws(
+    () =>
+      buildWith(photo, {
+        prompt: "Use @Image2",
+        images_list: ["/media/" + image],
+      }),
+    /Image2.*фото: 1/,
+  );
+  const prompt = "  Apply <image1> to @Image2\n unchanged  ";
+  assert.equal(
+    buildWith(photo, {
+      prompt,
+      images_list: ["/media/" + image, "/media/" + start],
+    }).prompt,
+    prompt,
+  );
+});
+test("friendly OpenAI display names do not change request model IDs", () => {
+  const model = {
+    ...photo,
+    id: "openai:gpt-image-2.5-sunburst-2026-09-08",
+    remote_model: "gpt-image-2.5-sunburst-2026-09-08",
+  };
+  const mapped = modelFromDescriptor(model, "t2i");
+  assert.equal(mapped.name, "OpenAI GPT Image 2.5 Sunburst");
+  assert.equal(mapped.id, model.id);
+});

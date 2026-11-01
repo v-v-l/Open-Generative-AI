@@ -1,6 +1,22 @@
-import { isReadOnly, modelUnavailableReason } from "./runtime.js";
+import { isReadOnly, modelUnavailableReason, isUploading } from "./runtime.js";
 import { runtime, descriptor, request, refresh, publish } from "./runtime.js";
 const imageExtensions = /\.(png|jpe?g|webp)$/i;
+const firstNonEmpty = (...values) =>
+  values.find((value) =>
+    Array.isArray(value) ? value.some(Boolean) : Boolean(value),
+  );
+export function referenceInputs(modelId, media) {
+  const m = descriptor(modelId);
+  if (m?.kind === "photo") return { images_list: media.imageUrls || [] };
+  return {
+    ...(m?.roles.start
+      ? { image_url: media.imageUrls?.[0] }
+      : { images_list: media.imageUrls || [] }),
+    last_image: media.endImageUrl || undefined,
+    videos_list: media.videoUrls || [],
+    audios_list: media.audioUrls || [],
+  };
+}
 export function refsFor(params, m) {
   const refs = [];
   const append = (urls, role) => {
@@ -16,22 +32,28 @@ export function refsFor(params, m) {
   };
   if (m.kind === "photo")
     append(
-      params.images_list ||
-        params.image_urls ||
-        params.imageUrls ||
+      firstNonEmpty(
+        params.images_list,
+        params.image_urls,
+        params.imageUrls,
         params.image_url,
+      ),
       "image",
     );
   else {
     if (params.image_url)
       append(params.image_url, m.roles.start ? "start" : "image");
     append(
-      params.last_image || params.last_image_url || params.end_image_url,
+      firstNonEmpty(
+        params.last_image,
+        params.last_image_url,
+        params.end_image_url,
+      ),
       "end",
     );
-    append(params.images_list || params.image_urls, "image");
-    append(params.videos_list || params.video_url, "video");
-    append(params.audios_list || params.audio_url, "audio");
+    append(firstNonEmpty(params.images_list, params.image_urls), "image");
+    append(firstNonEmpty(params.videos_list, params.video_url), "video");
+    append(firstNonEmpty(params.audios_list, params.audio_url), "audio");
   }
   for (const a of runtime.extraAssets[m.id] || [])
     refs.push({
@@ -84,10 +106,23 @@ export function buildJob(params) {
       if (params[key] !== undefined && params[key] !== "")
         job[key] = params[key];
   }
+  const imageCount = job.assets.filter((asset) =>
+    ["image", "start", "end"].includes(asset.role),
+  ).length;
+  const mentioned = [
+    ...String(job.prompt).matchAll(/<image_?(\d+)>|@Image\s*(\d+)/gi),
+  ].map((match) => Number(match[1] || match[2]));
+  const highest = Math.max(0, ...mentioned);
+  if (highest > imageCount)
+    throw Error(
+      `В промпте указан Image${highest}, но прикреплено фото: ${imageCount}. Добавьте референсы в строку вложений.`,
+    );
   return job;
 }
 async function enqueue(_key, params) {
   if (isReadOnly()) throw Error("Режим просмотра: генерация отключена");
+  if (isUploading(params.model))
+    throw Error("Дождитесь завершения загрузки референсов");
   const job = buildJob(params);
   const unavailable = modelUnavailableReason(params.model);
   if (unavailable) throw Error(unavailable);
@@ -120,6 +155,7 @@ export async function uploadFile(_key, file, onProgress) {
     data,
   });
   onProgress?.(100);
+  runtime.assetMetadata[asset.url] = { name: file.name, mime: file.type };
   return asset.url;
 }
 export async function getUserBalance() {

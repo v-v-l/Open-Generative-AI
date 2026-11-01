@@ -112,3 +112,19 @@ Browse/download originals and export an ordered photo set as a PNG sheet or ZIP.
 No model, prompt, seed, queue or workflow controls exist in this library. See
 [reference library manual](../nora/references/README.md). Source originals and
 provenance stay in private versioned apps storage outside Git.
+
+
+## Attaching generation references
+
+The composer commits file uploads immediately and displays attached thumbnails as
+Image1/Image2 or separate Start/End/Image/Video/Audio roles supported by the selected
+model. Reorder/remove files in that row; there is no hidden picker confirmation.
+Submission waits for upload completion. An explicit image placeholder without its
+corresponding attachment is rejected rather than silently generating from text.
+Prompt wording, quality defaults and requested dimensions are not rewritten.
+Price remains visible in one compact row; detailed tariffs, queue/budget behavior
+and native guide caveats are under the closed “Детали” section.
+
+The reference library additionally supports named sets with empty view slots and
+original uploads; these actions do not run any model. See its manual for storage
+and replacement behavior. Model generation still happens only in Image/Video Studio.

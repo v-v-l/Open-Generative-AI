@@ -11,13 +11,21 @@ const statusNames = {
   accepted: "Отобран",
   candidate: "Кандидат",
   working: "Рабочий референс",
+  user_supplied: "Загружен вами",
 };
 const limit = 16;
-let catalog = { records: [], missing: {} },
+let catalog = { records: [], missing: {}, collections: [] },
   selected = [],
   tab = "face",
   busy = false,
   exportURL = null;
+let creating = false, uploading = false, uploadTarget = null, uploadFile = null, uploadPreviewURL = null, savedCollection = "";
+const slotLabels = {
+  face: ["0° · спереди", "45° · передние ¾", "90° · профиль", "135° · задние ¾", "180° · сзади", "225° · задние ¾", "270° · профиль", "315° · передние ¾"],
+  body: ["0° · спереди", "45° · передние ¾", "90° · сбоку", "135° · задние ¾", "180° · сзади", "225° · задние ¾", "270° · сбоку", "315° · передние ¾"],
+  outfit: ["Спереди", "Сзади", "Сбоку", "Деталь"],
+  scene: ["Спереди · 0°", "Справа · 90°", "Сзади · 180°", "Слева · 270°"],
+};
 function node(tag, text, className) {
   const value = document.createElement(tag);
   if (text !== undefined) value.textContent = text;
@@ -57,6 +65,20 @@ function byAngle(a, b) {
 function record(id) {
   return catalog.records.find((item) => item.id === id);
 }
+function collectionInfo(id = $("#collection").value) {
+  return (catalog.collections || []).find((item) => item.id === id);
+}
+function collectionReadOnly(collection) {
+  return Boolean(catalog.read_only || collection.read_only);
+}
+function slotTitle(collection, slot) {
+  if (!collection.read_only && ["face", "body"].includes(collection.category) && /^\d+°$/.test(slot.title) && Number.isInteger(slot.angle_degrees / 45))
+    return slotLabels[collection.category][slot.angle_degrees / 45] || slot.title;
+  const defaults = {front: "Спереди", back: "Сзади", side: "Сбоку", detail: "Деталь", right: "Справа", left: "Слева"};
+  if (!collection.read_only && slot.title === slot.id.charAt(0).toUpperCase() + slot.id.slice(1) && defaults[slot.id])
+    return defaults[slot.id] + (collection.category === "scene" ? " · " + slot.angle_degrees + "°" : "");
+  return slot.title;
+}
 function mediaURL(item, type) {
   return (
     item[type + "_url"] ||
@@ -68,9 +90,12 @@ function mediaURL(item, type) {
 }
 function visibleRecords() {
   const query = $("#search").value.trim().toLocaleLowerCase("ru");
+  const current = collectionInfo();
+  const members = current ? new Set((current.slots || []).map((slot) => slot.reference_id)) : null;
   return catalog.records.filter(
     (item) =>
       inTab(item) &&
+      (!$("#collection").value || (members ? members.has(item.id) : item.collection === $("#collection").value)) &&
       (tab === "head360" ||
         $("#candidates").checked ||
         item.status !== "candidate") &&
@@ -142,6 +167,7 @@ function renderTabs() {
       tab = key;
       $("#search").value = "";
       $("#collection").value = "";
+      savedCollection = "";
       render();
     });
     value.setAttribute("aria-pressed", String(tab === key));
@@ -150,9 +176,31 @@ function renderTabs() {
 }
 function renderCards() {
   const items = visibleRecords();
+  const current = collectionInfo();
+  const query = $("#search").value.trim().toLocaleLowerCase("ru");
+  const matchesSlot = (collection, slot) => !query || [collection.title, slot.title, slot.angle_degrees].join(" ").toLocaleLowerCase("ru").includes(query);
+  let entries = items;
+  if (current) {
+    const shown = new Set(items.map((item) => item.id));
+    entries = (current.slots || []).flatMap((slot) => slot.reference_id
+      ? (shown.has(slot.reference_id) ? [{...record(slot.reference_id), librarySlot: slot, libraryCollection: current}] : [])
+      : (matchesSlot(current, slot) ? [{emptySlot: slot, libraryCollection: current}] : []));
+  } else {
+    for (const collection of catalog.collections || []) {
+      if (collection.category !== tab || collectionReadOnly(collection)) continue;
+      for (const slot of collection.slots || []) {
+        if (!slot.reference_id && matchesSlot(collection, slot)) entries.push({emptySlot: slot, libraryCollection: collection});
+      }
+    }
+  }
   $("#cards").replaceChildren();
-  $("#empty").hidden = items.length > 0;
-  for (const item of items) {
+  $("#empty").hidden = entries.length > 0;
+  for (const control of document.querySelectorAll("[data-create-category]")) control.disabled = busy || creating || uploading || Boolean(catalog.read_only);
+  for (const item of entries) {
+    if (item.emptySlot) {
+      $("#cards").append(emptySlotCard(item.libraryCollection, item.emptySlot));
+      continue;
+    }
     const chosen = selected.includes(item.id);
     const card = node(
       "article",
@@ -172,7 +220,7 @@ function renderCards() {
     picture.append(image, node("span", item.id, "card-id"));
     const body = node("div", undefined, "body");
     body.append(
-      node("h3", item.title || item.id),
+      node("h3", item.librarySlot ? slotTitle(item.libraryCollection, item.librarySlot) : item.title || item.id),
       node("div", (item.tags || []).join(" · "), "tags"),
       node(
         "span",
@@ -199,6 +247,14 @@ function renderCards() {
     download.href = mediaURL(item, "download");
     download.download = "";
     body.append(choose, download);
+    const collection = item.libraryCollection || collectionInfo(item.collection);
+    const slot = item.librarySlot || collection?.slots?.find((value) => value.reference_id === item.id);
+    if (collection && slot && !collectionReadOnly(collection)) {
+      const replace = button("Загрузить другой кадр", () => openUpload(collection, slot), "Заменить фотографию: " + slot.title);
+      replace.className = "replace-reference";
+      replace.disabled = busy || uploading;
+      body.append(replace);
+    }
     card.append(picture, body);
     $("#cards").append(card);
   }
@@ -206,6 +262,8 @@ function renderCards() {
 }
 function collectionRecords() {
   const collection = $("#collection").value;
+  const info = collectionInfo(collection);
+  if (info) return (info.slots || []).map((slot) => record(slot.reference_id)).filter(Boolean);
   return (
     collection
       ? catalog.records.filter((item) => item.collection === collection)
@@ -216,6 +274,14 @@ function collectionRecords() {
 }
 function renderCollectionNote() {
   const items = collectionRecords();
+  const info = collectionInfo();
+  if (info && !collectionReadOnly(info)) {
+    const slots = info.slots || [], missing = slots.filter((slot) => !slot.reference_id);
+    $("#collection-note").textContent = "Заполнено " + (slots.length - missing.length) + " из " + slots.length + " ракурсов. " +
+      (missing.length ? "Можно добавить сейчас или позже: " + missing.map((slot) => slotTitle(info, slot)).join(", ") + "." : "Все места заполнены. Можно собрать лист или заменить отдельный кадр.");
+    $("#select-collection").disabled = busy || items.length === 0;
+    return;
+  }
   let text = items.length + " фотографий в наборе.";
   const angles = items.map(angle).filter((value) => value !== null);
   if (angles.length) {
@@ -259,6 +325,10 @@ function render() {
     $("#missing").append(list);
   }
   renderSelection();
+  try {
+    savedCollection = $("#collection").value;
+    localStorage.setItem("alice-reference-library-view-v1", JSON.stringify({tab, collection: savedCollection}));
+  } catch {}
 }
 function move(id, offset) {
   const index = selected.indexOf(id),
@@ -386,6 +456,136 @@ function renderSheet() {
         sheetDimensions(value)[1] +
         " px.");
 }
+function emptySlotCard(collection, slot) {
+  const card = node("article", undefined, "card empty-slot");
+  card.dataset.collectionId = collection.id;
+  card.dataset.slotId = slot.id;
+  const picture = node("div", undefined, "slot-placeholder");
+  picture.append(node("span", "＋", "slot-symbol"), node("strong", slotTitle(collection, slot)));
+  if (typeof slot.angle_degrees === "number") picture.append(node("small", "Целевой угол " + slot.angle_degrees + "°"));
+  const body = node("div", undefined, "body");
+  body.append(node("h3", collection.title), node("p", "Фотография пока не добавлена", "hint"));
+  if (!collectionReadOnly(collection)) {
+    const upload = button("Загрузить фото", () => openUpload(collection, slot), "Загрузить фото: " + collection.title + " · " + slotTitle(collection, slot));
+    upload.className = "choose";
+    upload.disabled = busy || uploading;
+    body.append(upload, node("p", "Или перетащите сюда один файл", "drop-hint"));
+    card.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      if (!busy && !uploading) card.classList.add("drag-over");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+    card.addEventListener("drop", (event) => {
+      event.preventDefault();
+      card.classList.remove("drag-over");
+      if (busy || uploading) return;
+      const files = event.dataTransfer.files;
+      if (files.length !== 1) return message("На каждый ракурс загрузите одну фотографию.", true);
+      openUpload(collection, slot, files[0]);
+    });
+  } else body.append(node("p", catalog.read_only ? "Режим просмотра: загрузка в этой копии отключена." : "Исходный набор. Для своих кадров создайте новый набор.", "hint"));
+  card.append(picture, body);
+  return card;
+}
+function formMessage(id, text, error = false) {
+  $(id).textContent = text;
+  $(id).classList.toggle("error", error);
+}
+function renderSlotPlan() {
+  $("#create-slots").replaceChildren();
+  for (const label of slotLabels[$("#create-category").value] || []) $("#create-slots").append(node("span", label));
+}
+function openCreate(category) {
+  if (busy || uploading || creating || catalog.read_only) return;
+  $("#create-category").value = category;
+  $("#create-name").value = "";
+  $("#create-name").placeholder = {face: "Алиса · короткое каре", body: "Алиса · базовая фигура", outfit: "Чёрный комбинезон", scene: "Пальмовая аллея · закат"}[category];
+  formMessage("#create-message", "");
+  renderSlotPlan();
+  $("#create-collection").showModal();
+  $("#create-name").focus();
+}
+function clearUploadPreview() {
+  if (uploadPreviewURL) URL.revokeObjectURL(uploadPreviewURL);
+  uploadPreviewURL = null;
+  $("#upload-preview").hidden = true;
+  $("#upload-preview").removeAttribute("src");
+}
+function setUploadFile(file) {
+  clearUploadPreview();
+  uploadFile = null;
+  $("#submit-upload").disabled = true;
+  const maximum = catalog.limits?.max_upload_bytes || 40 * 1024 * 1024;
+  if (!file || !["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+    formMessage("#upload-message", "Выберите фотографию PNG, JPEG или WebP.", true);
+    return;
+  }
+  if (!file.size || file.size > maximum) {
+    formMessage("#upload-message", "Фотография должна быть не пустой и не больше 40 МБ.", true);
+    return;
+  }
+  uploadFile = file;
+  uploadPreviewURL = URL.createObjectURL(file);
+  $("#upload-preview").src = uploadPreviewURL;
+  $("#upload-preview").hidden = false;
+  $("#upload-preview").onerror = () => {
+    uploadFile = null;
+    $("#submit-upload").disabled = true;
+    formMessage("#upload-message", "Не удалось открыть фотографию. Выберите другой файл.", true);
+  };
+  $("#submit-upload").disabled = false;
+  formMessage("#upload-message", file.name + " · " + (file.size / 1024 / 1024).toFixed(1) + " МБ");
+}
+function openUpload(collection, slot, file = null) {
+  if (busy || uploading || collectionReadOnly(collection)) return;
+  uploadTarget = {collection, slot};
+  uploadFile = null;
+  clearUploadPreview();
+  $("#upload-input").value = "";
+  $("#upload-title").textContent = slotTitle(collection, slot);
+  $("#upload-target").textContent = collection.title + (slot.reference_id ? " · загрузка нового кадра; прежний оригинал сохранится" : " · пустой ракурс");
+  $("#upload-progress").hidden = true;
+  $("#upload-progress").value = 0;
+  $("#submit-upload").disabled = true;
+  formMessage("#upload-message", "");
+  $("#upload-reference").showModal();
+  if (file) setUploadFile(file);
+}
+function readFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = () => reject(Error("Не удалось прочитать выбранный файл."));
+    reader.readAsDataURL(file);
+  });
+}
+function uploadRequest(payload) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/references/api/uploads");
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.timeout = 120000;
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const percentage = Math.round(event.loaded / event.total * 100);
+      $("#upload-progress").value = Math.min(95, percentage);
+      formMessage("#upload-message", percentage < 100 ? "Отправка фотографии · " + percentage + "%" : "Проверяю и сохраняю фотографию…");
+    };
+    xhr.onload = () => {
+      let data;
+      try { data = JSON.parse(xhr.responseText); } catch { return reject(Error("Сервер вернул неверный ответ.")); }
+      if (xhr.status === 401) {
+        location.assign("/login?next=" + encodeURIComponent(location.pathname));
+        return reject(Error("Требуется вход."));
+      }
+      if (xhr.status < 200 || xhr.status >= 300) return reject(Error(data.error?.message || data.error || "Загрузка не удалась: " + xhr.status));
+      resolve(data);
+    };
+    xhr.onerror = () => reject(Error("Нет связи с сервером. Файл не удалось подтвердить; обновите набор перед повторной загрузкой."));
+    xhr.ontimeout = () => reject(Error("Сервер долго не отвечает. Обновите набор, чтобы проверить, сохранился ли файл."));
+    xhr.send(JSON.stringify(payload));
+  });
+}
 async function response(path, payload) {
   const result = await fetch(
     "/references/api/" + path,
@@ -409,13 +609,14 @@ async function response(path, payload) {
   }
   return result;
 }
-async function load() {
+async function load(options = {}) {
   $("#refresh-library").disabled = true;
   try {
     const result = await (await response("catalog")).json();
     if (!Array.isArray(result.records))
       throw Error("Неверный формат библиотеки");
     catalog = result;
+    $(".purpose").textContent = catalog.read_only ? "Режим просмотра · загрузка в этой копии отключена. Выбор и экспорт доступны." : "Загрузка, выбор и экспорт · без запуска генерации. Оригиналы сохраняются.";
     const retained = selected.filter((id) => record(id));
     if (retained.length !== selected.length) {
       selected = retained;
@@ -423,15 +624,17 @@ async function load() {
       saveSelection();
       message("Недоступные фотографии исключены из выбора.");
     }
-    const current = $("#collection").value;
+    const current = typeof options.collectionId === "string" ? options.collectionId : $("#collection").value || savedCollection;
     $("#collection").replaceChildren(new Option("Текущий раздел", ""));
+    const metadata = new Map((catalog.collections || []).map((item) => [item.id, item]));
+    const covered = new Set((catalog.collections || []).flatMap((item) => (item.slots || []).map((slot) => slot.reference_id)).filter(Boolean));
     [
       ...new Set(
-        catalog.records.map((item) => item.collection).filter(Boolean),
+        [...metadata.keys(), ...catalog.records.filter((item) => !covered.has(item.id)).map((item) => item.collection)].filter(Boolean),
       ),
     ].forEach((collection) =>
       $("#collection").append(
-        new Option(categoryNames[collection] || collection, collection),
+        new Option(metadata.get(collection)?.title || categoryNames[collection] || collection, collection),
       ),
     );
     if (
@@ -455,16 +658,88 @@ async function load() {
       $("#summary").append(value);
     }
     render();
+    return true;
   } catch (error) {
     message("Не удалось загрузить библиотеку: " + error.message, true);
+    return false;
   } finally {
     $("#refresh-library").disabled = false;
   }
 }
 $("#refresh-library").onclick = load;
+for (const control of document.querySelectorAll("[data-create-category]")) control.onclick = () => openCreate(control.dataset.createCategory);
+$("#create-category").onchange = renderSlotPlan;
+$("#close-create").onclick = () => $("#create-collection").close();
+$("#create-collection").addEventListener("cancel", (event) => { if (creating) event.preventDefault(); });
+$("#create-collection-form").onsubmit = async (event) => {
+  event.preventDefault();
+  if (catalog.read_only) return formMessage("#create-message", "Создание наборов в этой копии отключено.", true);
+  if (creating || !$("#create-name").value.trim()) return;
+  creating = true;
+  $("#submit-create").disabled = true;
+  $("#close-create").disabled = true;
+  formMessage("#create-message", "Создаю пустые места для ракурсов…");
+  try {
+    const data = await (await response("collections", {title: $("#create-name").value.trim(), category: $("#create-category").value})).json();
+    const collection = data.collection || data;
+    if (!collection.id) throw Error("Набор создан, но сервер не вернул его ID. Обновите библиотеку.");
+    tab = collection.category;
+    $("#search").value = "";
+    const loaded = await load({collectionId: collection.id});
+    $("#create-collection").close();
+    if (loaded) message("Набор «" + collection.title + "» создан. Выберите ракурс и загрузите фотографию.");
+  } catch (error) { formMessage("#create-message", error.message, true); }
+  finally {
+    creating = false;
+    $("#submit-create").disabled = false;
+    $("#close-create").disabled = false;
+    renderCards();
+  }
+};
+$("#upload-input").onchange = () => setUploadFile($("#upload-input").files[0]);
+$("#close-upload").onclick = () => $("#upload-reference").close();
+$("#upload-reference").addEventListener("cancel", (event) => { if (uploading) event.preventDefault(); });
+$("#upload-reference").addEventListener("close", clearUploadPreview);
+$("#upload-reference-form").onsubmit = async (event) => {
+  event.preventDefault();
+  if (catalog.read_only) return formMessage("#upload-message", "Загрузка в этой копии отключена.", true);
+  if (uploading || !uploadFile || !uploadTarget) return;
+  uploading = true;
+  $("#submit-upload").disabled = true;
+  $("#upload-input").disabled = true;
+  $("#close-upload").disabled = true;
+  $("#upload-progress").hidden = false;
+  formMessage("#upload-message", "Подготавливаю фотографию…");
+  try {
+    const data = await readFile(uploadFile);
+    await uploadRequest({collection_id: uploadTarget.collection.id, slot_id: uploadTarget.slot.id, name: uploadFile.name, mime: uploadFile.type, data});
+    $("#upload-progress").value = 100;
+    uploadFile = null;
+    tab = uploadTarget.collection.category;
+    $("#search").value = "";
+    const loaded = await load({collectionId: uploadTarget.collection.id});
+    if (loaded) {
+      $("#upload-reference").close();
+      message("Фотография сохранена: " + uploadTarget.collection.title + " · " + uploadTarget.slot.title + ". Остальные ракурсы можно добавить позже.");
+    } else formMessage("#upload-message", "Фотография сохранена, но каталог не обновился. Закройте окно и нажмите «Обновить».", true);
+  } catch (error) { formMessage("#upload-message", error.message, true); }
+  finally {
+    uploading = false;
+    $("#upload-input").disabled = false;
+    $("#close-upload").disabled = false;
+    $("#submit-upload").disabled = !uploadFile;
+    renderCards();
+  }
+};
 $("#search").oninput = renderCards;
 $("#candidates").onchange = renderCards;
-$("#collection").onchange = renderCollectionNote;
+$("#collection").onchange = () => {
+  const collection = collectionInfo();
+  if (collection) tab = collection.id === "head360" || (collection.slots || []).some((slot) => record(slot.reference_id)?.collection === "head360") ? "head360" : collection.category;
+  else if ($("#collection").value === "head360") tab = "head360";
+  $("#search").value = "";
+  render();
+};
 $("#select-collection").onclick = () => {
   const items = collectionRecords();
   if (items.length > limit) {
@@ -549,6 +824,9 @@ $("#preview").onclick = (event) => {
   if (event.target === $("#preview")) $("#preview").close();
 };
 try {
+  const view = JSON.parse(localStorage.getItem("alice-reference-library-view-v1") || "{}");
+  if (categoryNames[view.tab]) tab = view.tab;
+  if (typeof view.collection === "string") savedCollection = view.collection;
   const saved = JSON.parse(
     localStorage.getItem("alice-reference-library-selection-v1") || "[]",
   );
@@ -560,5 +838,6 @@ try {
 } catch {}
 window.addEventListener("beforeunload", () => {
   if (exportURL) URL.revokeObjectURL(exportURL);
+  if (uploadPreviewURL) URL.revokeObjectURL(uploadPreviewURL);
 });
 void load();

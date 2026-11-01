@@ -161,6 +161,6 @@ http
       send(res, { error: e.message });
     }
   })
-  .listen(36445, "127.0.0.1", () =>
+  .listen(Number(process.env.NORA_MOCK_PORT || 36445), "127.0.0.1", () =>
     console.log("PRIVATE test fixture http://127.0.0.1:36445 — no providers"),
   );

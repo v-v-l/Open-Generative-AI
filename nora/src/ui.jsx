@@ -1,7 +1,9 @@
 import { isReadOnly, availabilityReason, modelUnavailable } from "./runtime.js";
 import React, { useEffect, useState } from "react";
 import { runtime, publish, request, refresh, descriptor } from "./runtime.js";
-import { buildJob, uploadFile, historyFor, hideHistory } from "./api.js";
+import { buildJob, historyFor, hideHistory } from "./api.js";
+export { NoraAttachments } from "./attachments.jsx";
+export { referenceInputs as noraReferenceInputs } from "./api.js";
 export function useRuntime() {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -12,18 +14,20 @@ export function useRuntime() {
   return runtime.state;
 }
 export function NoraSummary({ params }) {
-  const state = useRuntime(),
-    [estimate, setEstimate] = useState(null),
-    [message, setMessage] = useState(""),
-    [busy, setBusy] = useState(false);
-  const model = descriptor(params.model),
-    signature = JSON.stringify(params),
-    [extraVersion, setExtraVersion] = useState(0);
+  const state = useRuntime();
+  const [estimate, setEstimate] = useState(null),
+    [error, setError] = useState("");
+  const model = descriptor(params.model);
+  const signature = JSON.stringify([
+    params,
+    runtime.extraAssets[params.model],
+    runtime.uploads[params.model],
+  ]);
   useEffect(() => {
     runtime.drafts[params.model] = params;
-    if (!String(params.prompt || "").trim()) {
+    if (!String(params.prompt || "").trim() || runtime.uploads[params.model]) {
       setEstimate(null);
-      setMessage("Добавьте промпт для расчёта");
+      setError("");
       return;
     }
     let stopped = false;
@@ -32,12 +36,12 @@ export function NoraSummary({ params }) {
         const result = await request("/api/estimate", buildJob(params));
         if (!stopped) {
           setEstimate(result);
-          setMessage("");
+          setError("");
         }
-      } catch (error) {
+      } catch (e) {
         if (!stopped) {
           setEstimate(null);
-          setMessage(error.message);
+          setError(e.message);
         }
       }
     }, 500);
@@ -45,142 +49,79 @@ export function NoraSummary({ params }) {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [signature, extraVersion]);
+  }, [signature]);
   if (!model) return null;
-  const unavailable = availabilityReason(model, state);
-  const extras = runtime.extraAssets[model.id] || [];
-  async function attach(files) {
-    setBusy(true);
-    try {
-      for (const file of files) {
-        if (extras.length >= (model.roles.image || 0))
-          throw Error("Превышен лимит фото-референсов");
-        const url = await uploadFile(null, file);
-        extras.push({
-          id: url.split("/").pop(),
-          url,
-          name: file.name,
-          role: "image",
-        });
-      }
-      runtime.extraAssets[model.id] = extras;
-      setExtraVersion((v) => v + 1);
-      publish();
-    } catch (error) {
-      setMessage(error.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  const cost = estimate?.estimated_usd,
+  const unavailable = availabilityReason(model, state),
+    cost = estimate?.estimated_usd,
     upper = estimate?.upper_usd;
   return (
-    <div className="nora-summary">
-      {unavailable ? (
-        <p className="nora-warning" role="status">
-          {unavailable}
-        </p>
-      ) : model.id === "qwen-local" &&
-        model.available === true &&
-        model.availability === "executor_ready" ? (
-        <p role="status">Qwen · Доступна</p>
-      ) : null}
-      {model.id === "h3-simplepod" && (
-        <>
-          <details>
-            <summary>Дополнительные image refs H3 ({extras.length})</summary>
+    <div className="nora-summary nora-summary-compact">
+      <div className="nora-cost-row">
+        <span className="nora-cost">
+          {model.id === "qwen-local"
+            ? "Локально · без оплаты API"
+            : typeof cost === "number"
+              ? "≈ $" + cost.toFixed(4)
+              : "Стоимость после генерации"}
+          {typeof upper === "number" && upper !== cost
+            ? " · до $" + upper.toFixed(4)
+            : ""}
+        </span>
+        <details className="nora-advanced">
+          <summary>Детали</summary>
+          <div>
             <p>
-              Первый/последний кадр задаются выше. Эти фото — отдельные
-              референсы внешности/одежды, по порядку Picture N.
+              Модель: <code>{model.remote_model || model.id}</code>
             </p>
-            <div className="nora-ref-tray">
-              {extras.map((a, i) => (
-                <div key={a.id}>
-                  <img src={a.url} alt={a.name} />
-                  <span>Picture {i + 1}</span>
-                  <button
-                    type="button"
-                    aria-label="Удалить референс"
-                    onClick={() => {
-                      runtime.extraAssets[model.id] = extras.filter(
-                        (x) => x !== a,
-                      );
-                      setExtraVersion((v) => v + 1);
-                      publish();
-                    }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              <label>
-                + Фото
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  multiple
-                  disabled={busy}
-                  onChange={(e) => {
-                    void attach([...e.target.files]);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-            </div>
-          </details>
-          <p>
-            H3: первый/последний кадр — мягкие направляющие. Если пропорции
-            отличаются от выхода, направляющая обрезается по центру. Видео/аудио
-            по 2–15 с, суммарно до 15 с на тип; всего до 12 файлов.
-          </p>
-        </>
-      )}
-      {model.pricing && (
-        <details className="nora-rates">
-          <summary>Тарифы провайдера</summary>
-          <pre>{JSON.stringify(model.pricing, null, 2)}</pre>
-          {typeof model.pricing_source === "string" &&
-            model.pricing_source.startsWith("https://") && (
-              <a href={model.pricing_source} target="_blank" rel="noreferrer">
-                Источник тарифов
-              </a>
+            {model.id === "h3-simplepod" && (
+              <p>
+                H3: Start/End — мягкие направляющие; при несовпадении пропорций
+                модель обрезает их по центру. Видео/аудио по 2–15 с, суммарно до
+                15 с на тип; всего до 12 файлов.
+              </p>
             )}
-          {model.timestamp && <small>Обновлено: {model.timestamp}</small>}
+            <p>
+              Файлы до 100 МБ, без автоматического кропа и ресайза при загрузке.
+              Порядок Image1, Image2 соответствует строке вложений. Промпт
+              передаётся дословно.
+            </p>
+            <p>
+              Max USD проверяет предварительную оценку. Если она неизвестна,
+              задание с бюджетом отклоняется. Это не гарантия итогового
+              списания. Очередь {state?.queue_paused ? "на паузе" : "запущена"}.
+            </p>
+            {(estimate?.uncertainty || estimate?.details) && (
+              <p>{String(estimate.uncertainty || estimate.details)}</p>
+            )}
+            {(estimate?.timestamp || model.timestamp) && (
+              <small>
+                Цены: {String(estimate?.timestamp || model.timestamp)}
+              </small>
+            )}
+            {model.pricing && (
+              <>
+                <h4>Тарифы провайдера</h4>
+                <pre>{JSON.stringify(model.pricing, null, 2)}</pre>
+                {typeof model.pricing_source === "string" &&
+                  model.pricing_source.startsWith("https://") && (
+                    <a
+                      href={model.pricing_source}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Источник тарифов
+                    </a>
+                  )}
+              </>
+            )}
+          </div>
         </details>
-      )}
-      <div className="nora-estimate">
-        <strong>
-          Оценка за одно задание:{" "}
-          {typeof cost === "number"
-            ? "≈ $" + cost.toFixed(4)
-            : "заранее неизвестна"}
-        </strong>
-        {typeof upper === "number" && upper !== cost && (
-          <span> · до ${upper.toFixed(4)}</span>
-        )}
-        <small>
-          {message ||
-            String(
-              estimate?.uncertainty ||
-                estimate?.details ||
-                "Фактическая стоимость определяется временем GPU или ответом провайдера.",
-            )}
-        </small>
-        {(estimate?.timestamp || model.timestamp) && (
-          <small>Цены: {String(estimate?.timestamp || model.timestamp)}</small>
-        )}
       </div>
-      <details>
-        <summary>Об очереди и бюджете</summary>
-        <p>
-          Бюджет Max USD проверяет предварительную оценку; если она неизвестна,
-          запуск с бюджетом отклоняется. Это не гарантия итогового списания.
-          Промпт отправляется дословно. Файлы до 100 МБ без автоматического
-          кропа и ресайза. Очередь{" "}
-          {state?.queue_paused ? "на паузе — аренда не начинается" : "запущена"}
-          .
+      {(unavailable || error) && (
+        <p className="nora-warning" role="status">
+          {unavailable || error}
         </p>
-      </details>
+      )}
     </div>
   );
 }
@@ -325,7 +266,9 @@ export function Shell({ ImageStudio, VideoStudio }) {
             </button>
           ))}
         </nav>
-        <a href="/references/" className="nora-reference-link">Референсы ↗</a>
+        <a href="/references/" className="nora-reference-link">
+          Референсы ↗
+        </a>
         <button
           disabled={isReadOnly()}
           onClick={async () => {

@@ -1,5 +1,6 @@
 """Reference browsing/export uses studio auth without touching model execution."""
 import importlib.util
+import base64
 import io
 import json
 from pathlib import Path
@@ -56,6 +57,28 @@ class ReferenceRoutes(unittest.TestCase):
         self.denied('/references/api/prepare',404,payload={},cookie=cookie)
         self.denied('/references/api/jobs',404,payload={},cookie=cookie)
         self.assertEqual(self.studio.db.execute('select count(*) from jobs').fetchone()[0],0)
+    def test_authenticated_upload_slots_persist_and_never_queue_generation(self):
+        self.denied('/references/api/collections',401,payload={'title':'My face','category':'face'})
+        cookie=self.login()
+        with self.request('/references/api/collections',{'title':'My face','category':'face'},cookie) as r:
+            self.assertEqual(r.status,201);collection=json.load(r)['collection']
+        self.assertEqual(len(collection['slots']),8)
+        raw=(Path(self.tmp.name)/'red.png').read_bytes()
+        payload={'collection_id':collection['id'],'slot_id':'a000','name':'new-face.png','mime':'image/png','data':base64.b64encode(raw).decode()}
+        self.denied('/references/api/uploads',403,payload=payload,cookie=cookie,origin='https://example.com')
+        with self.request('/references/api/uploads',payload,cookie) as r:
+            self.assertEqual(r.status,201);uploaded=json.load(r)
+        self.assertEqual(uploaded['record']['status'],'user_supplied')
+        with self.request(uploaded['record']['download_url'],cookie=cookie) as r:self.assertEqual(r.read(),raw)
+        self.http.reference_library=Library(self.tmp.name)
+        with self.request('/references/api/catalog',cookie=cookie) as r:
+            catalog=json.load(r);persisted=next(c for c in catalog['collections'] if c['id']==collection['id'])
+        self.assertEqual(sum(slot['reference_id'] is None for slot in persisted['slots']),7)
+        self.assertTrue(any(r['id']=='H000' for r in catalog['records']))
+        self.http.read_only=True
+        self.denied('/references/api/uploads',403,payload=payload,cookie=cookie)
+        self.assertEqual(self.studio.db.execute('select count(*) from jobs').fetchone()[0],0)
+
     def test_export_csrf_budget_and_private_inventory(self):
         cookie=self.login()
         self.denied('/references/api/export',403,payload={'ids':['H000']},cookie=cookie,origin='https://example.com')

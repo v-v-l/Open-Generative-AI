@@ -58,6 +58,24 @@ class CloudContracts(unittest.TestCase):
         self.assertIn(b'name="image[]"', body)
         self.assertNotIn(b'name="seed"', body)
 
+    def test_two_openai_references_reach_edits_in_order(self):
+        second=self.root/'second.png';Image.new('RGB',(8,8),'blue').save(second)
+        refs=[self.asset,{'id':'asset-2','role':'image','path':str(second)}]
+        folder=self.root/'two-references'
+        with patch.object(cloud,'_request',return_value=self.image_response()) as request:
+            cloud.run_job(self.openai_job(),folder,refs,self.events.append,lambda:False)
+        url,body,headers=request.call_args.args
+        self.assertTrue(url.endswith('/images/edits'))
+        self.assertEqual(body.count(b'name="image[]"'),2)
+        self.assertLess(body.index(b'reference-1.png'),body.index(b'reference-2.png'))
+        images=body.split(b'Content-Type: image/png\r\n\r\n')[1:]
+        self.assertEqual(len(images),2)
+        first=Image.open(io.BytesIO(images[0].split(b'\r\n--',1)[0]));second=Image.open(io.BytesIO(images[1].split(b'\r\n--',1)[0]))
+        self.assertGreater(first.getpixel((0,0))[0],200)
+        self.assertEqual(second.getpixel((0,0)),(0,0,255))
+        audit=json.loads((folder/'cloud-submission.json').read_text())
+        self.assertEqual(audit['references'],[{'id':'asset-1','role':'image'},{'id':'asset-2','role':'image'}])
+
     def test_duplicate_submission_is_not_retried(self):
         folder = self.root / "duplicate"
         folder.mkdir()

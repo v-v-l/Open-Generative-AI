@@ -522,7 +522,7 @@ class Handler(BaseHTTPRequestHandler):
     def reference_get(self, route):
         try:
             if route == '/references/api/catalog':
-                return self.send(200, self.references().catalog('/references'))
+                return self.send(200, {**self.references().catalog('/references'), 'read_only':bool(getattr(self.server,'read_only',False))})
             for prefix, operation in (('/references/image/', 'original'), ('/references/file/', 'original'), ('/references/thumb/', 'thumbnail')):
                 if route.startswith(prefix):
                     ident = route[len(prefix):]
@@ -603,7 +603,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.headers.get('Content-Type','').split(';')[0] != 'application/json': raise ValueError('application/json required')
             length = int(self.headers.get('Content-Length','0'))
-            body_limit = 4096 if route.startswith('/api/auth/') else MAX_BODY if route == '/api/uploads' else 1024 * 1024
+            body_limit = 4096 if route.startswith('/api/auth/') else MAX_BODY if route == '/api/uploads' else 57 * 1024 * 1024 if route == '/references/api/uploads' else 1024 * 1024
             if not 0 < length <= body_limit: return self.send(413,{'error':'Request too large or empty'})
             payload = json.loads(self.rfile.read(length))
             if not isinstance(payload,dict): raise ValueError('JSON object required')
@@ -620,6 +620,10 @@ class Handler(BaseHTTPRequestHandler):
                 auth = self.auth()
                 if auth: auth.logout(self.headers.get('Cookie'))
                 return self.send(200,{'authenticated':False},cookie=auth.cookie('',clear=True) if auth and auth.required else None)
+            if route == '/references/api/collections':
+                return self.send(201, self.references().create_collection(payload))
+            if route == '/references/api/uploads':
+                return self.send(201, self.references().upload_reference(payload))
             if route in ('/references/api/export', '/references/api/zip'):
                 if not REFERENCE_EXPORT_LOCK.acquire(blocking=False):
                     return self.send(429, {'error':'An export is already running; try again shortly'})

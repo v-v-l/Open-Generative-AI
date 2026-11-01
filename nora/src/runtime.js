@@ -3,6 +3,8 @@ export const runtime = {
   descriptors: [],
   listeners: new Set(),
   extraAssets: {},
+  uploads: {},
+  assetMetadata: {},
   drafts: {},
   hiddenJobs: new Set(),
 };
@@ -77,4 +79,8 @@ export function modelUnavailableReason(id) {
 }
 export function modelUnavailable(id) {
   return Boolean(modelUnavailableReason(id));
+}
+
+export function isUploading(id) {
+  return (runtime.uploads[id] || 0) > 0;
 }

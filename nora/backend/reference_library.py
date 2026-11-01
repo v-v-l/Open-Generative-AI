@@ -7,6 +7,11 @@ are intentionally ignored. This module performs no network or workflow actions.
 from __future__ import annotations
 
 import hashlib
+import base64
+import binascii
+from contextlib import contextmanager
+import copy
+import fcntl
 import io
 import json
 import math
@@ -16,6 +21,7 @@ import re
 import threading
 import warnings
 import zipfile
+import uuid
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -23,8 +29,10 @@ MAX_PIXELS = 64_000_000
 MAX_FILE_BYTES = 64 * 1024 * 1024
 MAX_ZIP_BYTES = 256 * 1024 * 1024
 MAX_MANIFEST_BYTES = 2 * 1024 * 1024
+MAX_UPLOAD_BYTES = 40 * 1024 * 1024
 ID = re.compile(r'[A-Za-z0-9_-]{1,80}\Z')
 FORMATS = {'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp'}
+CATEGORIES = {'face','body','outfit','scene'}
 
 
 class LibraryError(ValueError):
@@ -44,7 +52,7 @@ def _text(value, limit=500):
     if not isinstance(value, str):
         return ''
     # Metadata is deliberately not a back door for runtime source paths.
-    if re.search(r'(?:^|\s)/(?!/)[^\s]+|[A-Za-z]:[\\/]|file://',value):
+    if re.search(r'''(?:^|[\s"'(=])/(?!/)[^\s]+|[A-Za-z]:[\\/]|file://''',value):
         return ''
     return value[:limit]
 
@@ -64,6 +72,177 @@ class Library:
         self.records = {}
         self.metadata = {}
         self.refresh()
+
+    @contextmanager
+    def _mutation(self):
+        """Serialize multiple Library objects/processes using the same manifest."""
+        with self.lock:
+            try:
+                lock_path=self._path('.library.lock')
+                with lock_path.open('a') as stream:
+                    fcntl.flock(stream,fcntl.LOCK_EX)
+                    self._stamp=None
+                    self.refresh()
+                    yield
+            except OSError:
+                raise LibraryError('Reference library could not be saved',503) from None
+
+    def _persist(self, data):
+        encoded=json.dumps(data,ensure_ascii=False,indent=2).encode()+b'\n'
+        if len(encoded)>MAX_MANIFEST_BYTES:
+            raise LibraryError('Reference library metadata limit reached',413)
+        target=self._path('manifest.json')
+        temporary=self._path('.manifest-'+uuid.uuid4().hex+'.tmp')
+        try:
+            with temporary.open('xb') as stream:
+                stream.write(encoded);stream.flush();os.fsync(stream.fileno())
+            os.replace(temporary,target)
+            descriptor=os.open(self.root,os.O_RDONLY)
+            try:os.fsync(descriptor)
+            finally:os.close(descriptor)
+        finally:
+            temporary.unlink(missing_ok=True)
+        self._stamp=None
+        self.refresh()
+
+    @staticmethod
+    def _slots(category, supplied=None):
+        if supplied is None:
+            if category in ('face','body'):
+                supplied=[{'id':f'a{angle:03d}','title':f'{angle}°','angle_degrees':angle} for angle in range(0,360,45)]
+            elif category=='outfit':
+                supplied=[{'id':key,'title':key.title()} for key in ('front','back','side','detail')]
+            else:
+                supplied=[{'id':key,'title':key.title(),'angle_degrees':angle} for key,angle in zip(('front','right','back','left'),range(0,360,90))]
+        if not isinstance(supplied,list) or not 1<=len(supplied)<=16:
+            raise LibraryError('A reference set needs between 1 and 16 slots')
+        slots=[];seen=set()
+        for value in supplied:
+            if not isinstance(value,dict) or set(value)-{'id','title','angle_degrees'}:
+                raise LibraryError('Invalid reference slot')
+            identifier=value.get('id')
+            title=value.get('title',identifier)
+            if not isinstance(identifier,str) or not ID.fullmatch(identifier) or identifier in seen:
+                raise LibraryError('Slot IDs must be unique letters, numbers, underscores or hyphens')
+            if not isinstance(title,str) or not title.strip() or len(title)>120 or not _text(title):
+                raise LibraryError('A slot needs a title of up to 120 characters')
+            slot={'id':identifier,'title':title.strip(),'reference_id':None}
+            if 'angle_degrees' in value:
+                angle=value['angle_degrees']
+                if type(angle) not in (int,float) or not math.isfinite(angle) or not 0<=angle<360:
+                    raise LibraryError('Slot angle must be from 0 to less than 360 degrees')
+                slot['angle_degrees']=angle
+            slots.append(slot);seen.add(identifier)
+        return slots
+
+    def _collections(self):
+        """Expose reusable user sets and portable read-only legacy groups."""
+        collections=[]
+        for source in self.metadata.get('collections',[]):
+            collection={key:source[key] for key in ('id','title','category')}
+            collection['read_only']=False
+            collection['slots']=[{key:slot[key] for key in ('id','title','reference_id','angle_degrees') if key in slot} for slot in source['slots']]
+            collections.append(collection)
+        grouped={}
+        for identifier,record in self.records.items():
+            if record.get('collection_id'):
+                continue
+            category=record.get('category','face')
+            name=record.get('collection') or category
+            key='legacy-'+str(name) if ID.fullmatch('legacy-'+str(name)) else 'legacy-'+hashlib.sha256(str(name).encode()).hexdigest()[:16]
+            group=grouped.setdefault(key,{'id':key,'title':_text(str(name).replace('head360','Head 360°')),
+                                          'category':category,'read_only':True,'slots':[]})
+            slot={'id':identifier,'title':_text(record.get('title',identifier)),'reference_id':identifier}
+            if name=='head360' and re.fullmatch(r'H\d{3}',identifier):
+                slot['angle_degrees']=int(identifier[1:])
+            group['slots'].append(slot)
+        return collections+list(grouped.values())
+
+    def create_collection(self, payload):
+        if not isinstance(payload,dict) or set(payload)-{'title','category','slots'}:
+            raise LibraryError('Only a title, category and optional slots are accepted')
+        title=payload.get('title');category=payload.get('category')
+        if not isinstance(title,str) or not title.strip() or len(title)>120 or not _text(title):
+            raise LibraryError('A reference set needs a title of up to 120 characters')
+        if not isinstance(category,str) or category not in CATEGORIES:
+            raise LibraryError('Category must be face, body, outfit or scene')
+        collection={'id':'set-'+uuid.uuid4().hex,'title':title.strip(),'category':category,
+                    'slots':self._slots(category,payload.get('slots')),'read_only':False}
+        with self._mutation():
+            data=copy.deepcopy(self.metadata)
+            if len(data.get('collections',[]))>=200:
+                raise LibraryError('Reference set limit reached',413)
+            data.setdefault('collections',[]).append(collection)
+            self._persist(data)
+        return {'collection':copy.deepcopy(collection)}
+
+    def upload_reference(self, payload):
+        if not isinstance(payload,dict) or set(payload)-{'collection_id','slot_id','name','mime','data'}:
+            raise LibraryError('Unsupported reference upload fields')
+        name=payload.get('name');mime=payload.get('mime');encoded=payload.get('data')
+        if not isinstance(name,str) or not name or len(name)>240 or '/' in name or '\\' in name or any(ord(c)<32 for c in name):
+            raise LibraryError('Upload name must be a filename without a path')
+        if not isinstance(mime,str) or mime not in ('image/png','image/jpeg','image/webp'):
+            raise LibraryError('Upload a PNG, JPEG or WebP original')
+        if not isinstance(encoded,str) or not encoded or len(encoded)>4*((MAX_UPLOAD_BYTES+2)//3):
+            raise LibraryError('Reference upload exceeds the 40 MiB limit',413)
+        try:
+            raw=base64.b64decode(encoded,validate=True)
+        except (ValueError,binascii.Error):
+            raise LibraryError('Invalid reference image encoding') from None
+        if not raw or len(raw)>MAX_UPLOAD_BYTES:
+            raise LibraryError('Reference upload exceeds the 40 MiB limit',413)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('error',Image.DecompressionBombWarning)
+                with Image.open(io.BytesIO(raw)) as image:
+                    expected={'PNG':'image/png','JPEG':'image/jpeg','WEBP':'image/webp'}.get(image.format)
+                    if expected!=mime or getattr(image,'n_frames',1)!=1:
+                        raise LibraryError('MIME type must match a single original image')
+                    if image.width*image.height>MAX_PIXELS:
+                        raise LibraryError('Reference image exceeds the 64 megapixel limit',413)
+                    size=list(image.size)
+                    image.verify()
+                with Image.open(io.BytesIO(raw)) as image:
+                    image.load()
+                    with ImageOps.exif_transpose(image) as oriented:size=list(oriented.size)
+        except LibraryError:
+            raise
+        except (OSError,ValueError,Image.DecompressionBombError,Image.DecompressionBombWarning):
+            raise LibraryError('Upload is not a valid bounded raster image') from None
+        identifier='U'+uuid.uuid4().hex
+        extension={'image/png':'.png','image/jpeg':'.jpg','image/webp':'.webp'}[mime]
+        relative='uploads/'+identifier+extension
+        with self._mutation():
+            if len(self.records)>=5000:
+                raise LibraryError('Reference image limit reached',413)
+            data=copy.deepcopy(self.metadata)
+            collection=next((item for item in data.get('collections',[]) if item['id']==payload.get('collection_id')),None)
+            if collection is None:
+                raise LibraryError('Unknown editable reference set',404)
+            slot=next((item for item in collection['slots'] if item['id']==payload.get('slot_id')),None)
+            if slot is None:
+                raise LibraryError('Unknown reference slot',404)
+            previous=slot.get('reference_id')
+            record={'id':identifier,'path':relative,'category':collection['category'],'collection':collection['id'],
+                    'collection_id':collection['id'],'slot_id':slot['id'],'title':slot['title'],'status':'user_supplied',
+                    'source_kind':'individual','size':size,'sha256':hashlib.sha256(raw).hexdigest(),'original_name':name,
+                    'mime':mime,'tags':[],'parent_review':{'verdict':'user_supplied','user_approval':False}}
+            if 'angle_degrees' in slot:record['angle_degrees']=slot['angle_degrees']
+            data['records'].append(record);slot['reference_id']=identifier
+            directory=self._path('uploads');directory.mkdir(exist_ok=True)
+            target=self._path(relative)
+            try:
+                with target.open('xb') as stream:
+                    stream.write(raw);stream.flush();os.fsync(stream.fileno())
+                self._persist(data)
+            except BaseException:
+                # Retain the new original on an uncertain fsync/manifest failure.
+                # An orphan is recoverable; deleting a possibly committed asset
+                # would leave a manifest pointer to a missing photograph.
+                raise
+            public=next(item for item in self.catalog()['records'] if item['id']==identifier)
+            return {'collection':copy.deepcopy(collection),'record':public,'replaced_reference_id':previous}
 
     def _path(self, relative):
         if not isinstance(relative,str) or not relative or '\\' in relative:
@@ -98,10 +277,34 @@ class Library:
                         raise LibraryError('Reference manifest has an invalid or duplicate ID',503)
                     if record.get('source_kind','individual') != 'individual':
                         raise LibraryError('Reference library accepts original individual photographs only',503)
+                    if not isinstance(record.get('category'),str) or record['category'] not in CATEGORIES:
+                        raise LibraryError('Reference manifest has an invalid category',503)
+                    if record.get('collection') is not None and (not isinstance(record['collection'],str) or not ID.fullmatch(record['collection'])):
+                        raise LibraryError('Reference manifest has an invalid collection name',503)
                     path = self._path(record.get('path'))
                     if path.suffix.lower() not in FORMATS:
                         raise LibraryError('Reference manifest supports raster images only',503)
                     records[identifier] = dict(record)
+                collections=data.get('collections',[])
+                if not isinstance(collections,list) or len(collections)>200:
+                    raise LibraryError('Reference manifest has invalid collections',503)
+                seen=set()
+                for collection in collections:
+                    if not isinstance(collection,dict) or not isinstance(collection.get('id'),str) or not ID.fullmatch(collection['id']) or collection['id'] in seen:
+                        raise LibraryError('Reference manifest has an invalid collection ID',503)
+                    if collection.get('category') not in CATEGORIES or not _text(collection.get('title')):
+                        raise LibraryError('Reference manifest has invalid collection metadata',503)
+                    slots=collection.get('slots')
+                    if not isinstance(slots,list):
+                        raise LibraryError('Reference manifest has invalid slots',503)
+                    try:
+                        self._slots(collection['category'],[{key:value for key,value in slot.items() if key!='reference_id'} for slot in slots])
+                    except (LibraryError,AttributeError,TypeError):
+                        raise LibraryError('Reference manifest has invalid slots',503) from None
+                    for slot in slots:
+                        if slot.get('reference_id') is not None and slot.get('reference_id') not in records:
+                            raise LibraryError('Reference slot points to an unknown original',503)
+                    seen.add(collection['id'])
                 self.records = records
                 self.metadata = data
                 self._stamp = stamp
@@ -151,8 +354,9 @@ class Library:
         records = []
         with self.lock:
             for identifier, record in self.records.items():
-                public = {key:_text(record[key]) for key in ('category','collection','title','status') if key in record}
+                public = {key:_text(record[key]) for key in ('category','collection','collection_id','slot_id','title','status') if key in record}
                 public['id'] = identifier
+                public['source_kind'] = 'individual'
                 public['tags'] = [_text(v,150) for v in record.get('tags',[])[:30]] if isinstance(record.get('tags'),list) else []
                 size = record.get('size')
                 if isinstance(size,list) and len(size)==2 and all(type(n) is int and 0<n<=100000 for n in size):
@@ -177,8 +381,9 @@ class Library:
             return {'character':_text(self.metadata.get('character',''),100),'records':records,
                     'defaults':{_text(k,80):v for k,v in defaults.items() if isinstance(v,str) and v in self.records} if isinstance(defaults,dict) else {},
                     'missing':{_text(k,80):[_text(v) for v in values[:30]] for k,values in missing.items() if isinstance(values,list)} if isinstance(missing,dict) else {},
-                    'policy':_text(self.metadata.get('policy','')),'supports_zip':True,'export_formats':['png','zip'],
-                    'limits':{'max_references':16,'max_columns':8,'max_pixels':MAX_PIXELS,'max_dimension':16384}}
+                    'policy':_text(self.metadata.get('policy','')),'collections':self._collections(),
+                    'supports_zip':True,'supports_uploads':True,'export_formats':['png','zip'],
+                    'limits':{'max_references':16,'max_columns':8,'max_pixels':MAX_PIXELS,'max_dimension':16384,'max_upload_bytes':MAX_UPLOAD_BYTES}}
 
     def original(self, identifier):
         record=self._record(identifier)

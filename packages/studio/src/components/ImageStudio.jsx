@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { NoraSummary } from "@nora/ui";
-import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable } from "@nora/runtime";
+import { NoraSummary, NoraAttachments } from "@nora/ui";
+import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateImage, generateI2I, uploadFile } from "../muapi.js";
 import { formatErrorMessage } from "../utils/formatError.js";
@@ -1623,52 +1623,7 @@ export default function ImageStudio({
       <PromptComposer>
           {/* Top row: upload picker + textarea */}
           <div className="flex flex-col gap-3">
-            {/* Inline list of uploaded files */}
-            <div className="flex items-center gap-2.5 flex-wrap">
-              {uploadedImageUrls && uploadedImageUrls.length > 0 && uploadedImageUrls.map((url, idx) => (
-                <div key={url} className={PROMPT_MEDIA_PREVIEW_CLASS}>
-                  <img src={url} alt="" className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = uploadedImageUrls.filter((_, i) => i !== idx);
-                      setUploadedImageUrls(next);
-                      if (next.length === 0) handleUploadClear();
-                    }}
-                    className="absolute top-0.5 right-0.5 w-4 h-4 bg-black/60 hover:bg-black rounded-full flex items-center justify-center text-white/85 hover:text-white text-[8px] border border-white/5"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              
-              {/* Main Upload Trigger */}
-              {referenceVariant && uploadedImageUrls.length < referenceImageLimit && (
-                <UploadButton
-                  apiKey={apiKey}
-                  maxImages={referenceImageLimit}
-                  onSelect={handleUploadSelect}
-                  onClear={handleUploadClear}
-                  initialUrls={uploadedImageUrls}
-                  persistedHistory={uploadHistory}
-                  onHistoryChange={setUploadHistory}
-                  copy={copy}
-                />
-              )}
-
-              {/* Swap Image Upload Trigger */}
-              {imageMode && getI2IModelById(selectedModelId)?.swapField && (
-                <UploadButton
-                  apiKey={apiKey}
-                  maxImages={1}
-                  onSelect={({ urls }) => setSwapImageUrl(urls[0] || null)}
-                  onClear={() => setSwapImageUrl(null)}
-                  initialUrls={swapImageUrl ? [swapImageUrl] : []}
-                  label={copy.promptBar.swapFaceLabel}
-                  copy={copy}
-                />
-              )}
-            </div>
+            <NoraAttachments modelId={selectedModelId} imageUrls={uploadedImageUrls} onChange={(_role, urls) => setUploadedImageUrls(urls)} />
 
             {/* Input prompt text area */}
             <PromptTextarea
@@ -1686,7 +1641,7 @@ export default function ImageStudio({
             <PromptControls ref={dropdownRef}>
               {/* Model button */}
               <div className="relative">
-                <button
+                <button disabled={noraIsUploading(selectedModelId)}
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1893,7 +1848,7 @@ export default function ImageStudio({
             {/* Generate button */}
             <PromptAction
               onClick={handleGenerate}
-              disabled={generating || noraReadOnly() || noraModelUnavailable(selectedModelId)}
+              disabled={generating || noraReadOnly() || noraModelUnavailable(selectedModelId) || noraIsUploading(selectedModelId)}
             >
               {generating ? (
                 <>

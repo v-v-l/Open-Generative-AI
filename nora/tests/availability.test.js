@@ -66,3 +66,12 @@ test("live executor offline state takes precedence over stale descriptor, while 
     "",
   );
 });
+test("pending uploads block enqueue before a network request", async () => {
+  runtime.state = { read_only: false };
+  runtime.uploads = { "qwen-local": 1 };
+  await assert.rejects(
+    generateImage(null, { model: "qwen-local", prompt: "x" }),
+    /завершения загрузки/,
+  );
+  runtime.uploads = {};
+});

@@ -12,13 +12,19 @@
       <div class="eyebrow">БИБЛИОТЕКА ПЕРСОНАЖА</div>
       <h1>Алиса<span> / референсы</span></h1>
       <p>
-        Просмотр оригиналов и сборка одного референсного листа из выбранных
-        фотографий.
+        Добавляйте свои фотографии по ракурсам и собирайте референсные листы
+        из выбранных оригиналов.
       </p>
       <p class="purpose">
-        Библиотека только для чтения · выбор и экспорт не меняют исходники.
+        Загрузка, выбор и экспорт · без запуска генерации. Оригиналы сохраняются.
       </p>
       <div id="summary" class="summary"></div>
+      <div class="add-reference-actions" aria-label="Добавить набор референсов">
+        <button type="button" data-create-category="face">＋ Добавить референсы лица</button>
+        <button type="button" data-create-category="body">＋ Добавить референсы фигуры</button>
+        <button type="button" data-create-category="outfit">＋ Добавить одежду</button>
+        <button type="button" data-create-category="scene">＋ Добавить локацию</button>
+      </div>
     </header>
     <main>
       <section class="library" aria-label="Библиотека референсов">
@@ -141,9 +147,41 @@
         <a id="original" download>Скачать оригинал</a>
       </div>
     </dialog>
+    <dialog id="create-collection" aria-labelledby="create-title">
+      <form id="create-collection-form" class="library-form">
+        <button type="button" id="close-create" class="close" aria-label="Закрыть создание набора">×</button>
+        <div class="eyebrow">НОВЫЙ НАБОР</div>
+        <h2 id="create-title">Референсы по ракурсам</h2>
+        <p class="hint">Создадим пустые места для фотографий. Их можно заполнить сейчас или вернуться позже.</p>
+        <label>Раздел<select id="create-category" name="category">
+          <option value="face">Лицо / причёска</option>
+          <option value="body">Фигура / поза</option>
+          <option value="outfit">Одежда</option>
+          <option value="scene">Локация</option>
+        </select></label>
+        <label>Название набора<input id="create-name" name="title" type="text" maxlength="120" placeholder="Например: Алиса · короткое каре" required /></label>
+        <div><h3>Ракурсы в наборе</h3><div id="create-slots" class="slot-plan"></div></div>
+        <p id="create-message" class="form-message" role="status" aria-live="polite"></p>
+        <button id="submit-create" class="primary" type="submit">Создать пустой набор</button>
+      </form>
+    </dialog>
+    <dialog id="upload-reference" aria-labelledby="upload-title">
+      <form id="upload-reference-form" class="library-form">
+        <button type="button" id="close-upload" class="close" aria-label="Закрыть загрузку">×</button>
+        <div class="eyebrow">ДОБАВИТЬ ФОТОГРАФИЮ</div>
+        <h2 id="upload-title">Референс</h2>
+        <p id="upload-target" class="hint"></p>
+        <label class="upload-picker">PNG, JPEG или WebP · до 40 МБ<input id="upload-input" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+        <img id="upload-preview" class="upload-preview" alt="Выбранная фотография для загрузки" hidden />
+        <p class="hint">Фотография сохраняется целиком. Загрузка не меняет статусы ранее отобранных кадров.</p>
+        <progress id="upload-progress" max="100" value="0" hidden aria-label="Загрузка фотографии"></progress>
+        <p id="upload-message" class="form-message" role="status" aria-live="polite"></p>
+        <button id="submit-upload" class="primary" type="submit" disabled>Сохранить в этот ракурс</button>
+      </form>
+    </dialog>
     <footer>
       Углы сгенерированных ракурсов номинальные. Статус «Кандидат» сохраняется
-      при выборе и экспорте. Пустые и недостающие ракурсы не достраиваются.
+      при выборе и экспорте. Пустые ракурсы заполняются вашими фотографиями.
     </footer>
     <script src="/references/app.js" defer></script>
   </body>

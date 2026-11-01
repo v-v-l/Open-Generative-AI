@@ -1,3 +1,16 @@
+export function modelDisplayName(model) {
+  const remote = model.remote_model || model.id.replace(/^openai:/, "");
+  const image = /^gpt-image-(\d+(?:\.\d+)?)(.*)$/i.exec(
+    remote.replace(/-20\d{2}-\d{2}-\d{2}$/, ""),
+  );
+  if (model.provider === "openai" && image)
+    return (
+      "OpenAI GPT Image " +
+      image[1] +
+      image[2].replace(/-([a-z])/g, (_, letter) => " " + letter.toUpperCase())
+    );
+  return model.label;
+}
 // Translate only verified backend capabilities; do not infer provider support from a product name.
 export function modelFromDescriptor(m, mode) {
   const inputs = {
@@ -99,7 +112,7 @@ export function modelFromDescriptor(m, mode) {
   };
   const result = {
     id: m.id,
-    name: m.label,
+    name: modelDisplayName(m),
     endpoint: m.id,
     description: local ? "Our " + m.provider : "Via " + m.provider,
     provider: m.provider,

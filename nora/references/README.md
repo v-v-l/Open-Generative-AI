@@ -1,7 +1,7 @@
 # Reference library
 
 The private library lives at `/references/` under the studio's existing login.
-Its routes browse originals, generate display thumbnails, and export selected
+Its routes organize/upload originals, generate display thumbnails, and export selected
 photos as one PNG sheet or a ZIP of original files. It has no generation,
 ComfyUI upload, workflow preparation, queue, seed, model or provider actions.
 
@@ -11,6 +11,20 @@ Choose Face, Head 360°, Body, Clothes or Location. Review status stays visible;
 selecting or exporting a candidate does not approve it or add it to training.
 Each card opens the original and offers a direct download. Candidate head angles
 are nominal targets, not measured camera calibration.
+
+Use “Добавить референсы лица/фигуры”, “Добавить одежду” or “Добавить локацию”
+to create a named reusable set. Face/body sets start with eight nominal 45-degree
+slots; clothing uses front/back/side/detail; locations use four directions. Empty
+slots stay visible and can be filled later through a file picker or drag/drop.
+Uploads are PNG/JPEG/WebP up to40 MiB and preserve the original bytes. They are
+marked “Загружен вами”, not automatically approved or added to training. A slot
+replacement keeps the previous original in the library. Legacy accepted/candidate
+sets remain protected; create a new set for your own photos.
+
+Server-side sets and filled slots persist across devices/reloads. Only the temporary
+export selection is browser-local. Uploaded JPEG orientation is honored in previews
+and sheets while original downloads remain byte-exact. Manifest changes use a
+cross-process file lock and atomic replacement; uploads never enqueue inference.
 
 Choose individual cards or a named collection. The selected list defines export
 order left-to-right, then top-to-bottom. Reorder/remove items with its buttons.
@@ -61,6 +75,8 @@ for this reference-only preview. The former workflow preparation server is retir
 
 - `GET /references/api/catalog`
 - `GET /references/image/ID`, `/thumb/ID`, `/file/ID`
+- `POST /references/api/collections`: `{title,category,slots?}`
+- `POST /references/api/uploads`: `{collection_id,slot_id,name,mime,data}`
 - `POST /references/api/export`: `{ids,columns,cell_width,cell_height,labels}`
 - `POST /references/api/zip`: `{ids}`
 
