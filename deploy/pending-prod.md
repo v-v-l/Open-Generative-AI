@@ -208,3 +208,20 @@ work/reference-library-lora-desktop.png, work/reference-library-lora-mobile.png,
 work/studio-public-lora-menu-verification.json and matching public screenshots.
 No database migrations; existing portable manifest format extended for LoRA items
 and media metadata. User journey updated; service topology remains unchanged.
+
+## Promoted — 2026-11-01: scrolling parameter modal with Apply/Cancel
+
+Frontend release `nora-v4f-parameter-modal`, source `7776271`.
+
+- [x] Replaced connected photo/video PARAMS popovers with a portaled native modal and separate draft values. Apply commits the supported fields; Cancel, close, Escape and backdrop discard edits and restore focus.
+- [x] Preserved schema types/defaults/enums/labels and numeric limits; added validation, internal touch scrolling, fixed header/footer and visualViewport sizing for small visible areas. Separately selected seed, prompts and references remain unchanged.
+- [x] Opening parameters closes previous legacy popovers. Unconnected upstream grouped tools remain unchanged.
+- [x] Frontend check/typecheck, unit tests and production build passed. Actual isolated form tests verified numeric/boolean Apply and Cancel for photo/video, invalid bounds, focus/close behavior and real CDP touch swipe (scrollTop0→192).
+- [x] Short390x360 viewport fit verified: modaltop12/bottom348, footerbottom347, content scrolls inside172px region. Chromium mobile/touch emulation verified; actual iOS Safari was not tested.
+- [x] Private candidate negative authentication/Host/peer gate passed; activated frontend only. Backend stays on `nora-v4e-lora-library`; no restart, queue setting or schema/env changes.
+- [x] Public smoke verified both studios' Cancel and Apply, mobile scrolling, reachable footer and screen-fitting352x576 dialog at390x600. Jobs remained10 before/after; no page errors or paid calls.
+
+Evidence outside Git: work/studio-parameters-validation.json,
+work/studio-public-parameter-modal-verification.json and desktop/mobile screenshots.
+User journey documents draft commit/discard behavior. No migration or infrastructure
+change required.
