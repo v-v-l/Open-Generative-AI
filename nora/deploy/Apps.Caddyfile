@@ -4,37 +4,41 @@
 }
 :36443 {
     bind 192.168.100.70
-    @blocked not remote_ip 192.168.100.10
-    respond @blocked "Private gateway access only" 403
-    @wrong_host not host media.bp-flow.com
-    respond @wrong_host "Unknown host" 403
-    header {
-        X-Content-Type-Options "nosniff"
-        X-Robots-Tag "noindex, nofollow"
-        X-Frame-Options "DENY"
-        Referrer-Policy "same-origin"
-        Cache-Control "private, no-store"
-    }
-    request_body {
-        max_size 140MB
-    }
-    @backend path /api/* /media/* /login
-    handle @backend {
-        reverse_proxy 127.0.0.1:36442 {
-            header_up Host media.bp-flow.com
+    route {
+        header {
+            X-Content-Type-Options "nosniff"
+            X-Robots-Tag "noindex, nofollow"
+            X-Frame-Options "DENY"
+            Referrer-Policy "same-origin"
+            Cache-Control "private, no-store"
         }
-    }
-    handle {
-        forward_auth 127.0.0.1:36442 {
-            uri /api/auth/check
-            header_up Host media.bp-flow.com
-            @unauthorized status 401
-            handle_response @unauthorized {
-                redir /login 302
+        request_body {
+            max_size 140MB
+        }
+        @blocked not remote_ip 192.168.100.10
+        respond @blocked "Private gateway access only" 403
+        @wrong_host not host media.bp-flow.com
+        respond @wrong_host "Unknown host" 403
+        @backend path /api/* /media/* /login
+        handle @backend {
+            reverse_proxy 127.0.0.1:36442 {
+                header_up Host media.bp-flow.com
             }
         }
-        root * /srv/open-generative-ai
-        try_files {path} /index.html
-        file_server
+        handle {
+            route {
+                forward_auth 127.0.0.1:36442 {
+                    uri /api/auth/check
+                    header_up Host media.bp-flow.com
+                    @unauthorized status 401
+                    handle_response @unauthorized {
+                        redir * /login 302
+                    }
+                }
+                root * /srv/open-generative-ai
+                try_files {path} /index.html
+                file_server
+            }
+        }
     }
 }

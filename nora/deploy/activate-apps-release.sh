@@ -2,6 +2,26 @@
 set -euo pipefail
 [[ $# -eq 1 && "$1" =~ ^[A-Za-z0-9_-]+$ ]] || { echo 'Usage: activate-apps-release.sh REVIEWED_RELEASE_ID' >&2; exit 2; }
 release_id="$1"
+project_root="${NORA_PROJECT_ROOT:-$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().parents[4])' "$0")}"
+script_dir="$(dirname "$(readlink -f "$0")")"
+receipt="$project_root/work/media-studio-deploy/candidate-$release_id.json"
+receipt_valid() {
+python3 - "$receipt" "$project_root/work/media-studio-deploy/releases/$release_id" "$release_id" <<'PYGATE'
+import hashlib,json,sys
+from pathlib import Path
+try:
+ receipt=json.loads(Path(sys.argv[1]).read_text());bundle=Path(sys.argv[2]);release=sys.argv[3]
+ assert receipt.get('passed') is True and receipt.get('release')==release
+ assert receipt.get('manifest_sha256')==hashlib.sha256((bundle/'release.json').read_bytes()).hexdigest()
+ assert receipt.get('proxy_sha256')==hashlib.sha256((bundle/'Apps.Caddyfile').read_bytes()).hexdigest()
+except (OSError,ValueError,AssertionError):raise SystemExit(1)
+PYGATE
+}
+if ! receipt_valid; then
+  echo 'No matching successful private candidate receipt; running required negative gate first'
+  "$script_dir/verify-private-candidate.sh" "$release_id"
+  receipt_valid || { echo 'Private candidate receipt verification failed' >&2; exit 1; }
+fi
 ssh -i "${MEDIA_STUDIO_SSH_KEY:-/home/victor/.ssh/bbright_codex_ed25519}" \
   -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
   "${MEDIA_STUDIO_SSH_TARGET:-victor@apps}" bash -s -- "$release_id" <<'REMOTE'
