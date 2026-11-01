@@ -155,7 +155,9 @@ export function Queue() {
         ref={trigger}
         type="button"
         className="nora-queue-trigger"
-        aria-label={"Открыть очередь · " + pending.length + " · " + status}
+        aria-label={
+          "Открыть меню и очередь · " + pending.length + " · " + status
+        }
         aria-haspopup="dialog"
         onClick={() => dialog.current?.showModal()}
       >
@@ -205,19 +207,57 @@ export function Queue() {
       >
         <header className="nora-sidebar-header">
           <div>
-            <h2 id={titleId}>Очередь · {pending.length}</h2>
+            <h2 id={titleId}>Меню и очередь · {pending.length}</h2>
             <p>{status}</p>
           </div>
           <button
             type="button"
             autoFocus
             onClick={close}
-            aria-label="Закрыть очередь"
+            aria-label="Закрыть меню и очередь"
           >
             ×
           </button>
         </header>
+        <section className="nora-sidebar-menu" aria-label="Главное меню">
+          <a href="/" className="nora-brand">
+            Open Generative AI <small>Alice</small>
+          </a>
+          <nav aria-label="Сервисные действия">
+            <a href="/references/" className="nora-reference-link">
+              Референсы ↗
+            </a>
+            <button
+              type="button"
+              disabled={isReadOnly()}
+              onClick={async () => {
+                try {
+                  await request("/api/catalog/refresh", {});
+                  location.reload();
+                } catch (error) {
+                  setError(error.message);
+                }
+              }}
+            >
+              Обновить каталог
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await request("/api/auth/logout", {});
+                  location.assign("/login");
+                } catch (error) {
+                  setError(error.message);
+                }
+              }}
+            >
+              Выйти
+            </button>
+          </nav>
+        </section>
         <div className="nora-sidebar-controls">
+          <h3>Очередь · {pending.length}</h3>
           <button
             type="button"
             disabled={isReadOnly()}
@@ -328,9 +368,6 @@ export function Shell({ ImageStudio, VideoStudio }) {
     <div className="nora-app">
       <header className="nora-header">
         <Queue />
-        <a href="/" className="nora-brand">
-          Open Generative AI <small>Alice</small>
-        </a>
         <nav>
           {studios.map(([id, label]) => (
             <button
@@ -342,30 +379,6 @@ export function Shell({ ImageStudio, VideoStudio }) {
             </button>
           ))}
         </nav>
-        <a href="/references/" className="nora-reference-link">
-          Референсы ↗
-        </a>
-        <button
-          disabled={isReadOnly()}
-          onClick={async () => {
-            try {
-              await request("/api/catalog/refresh", {});
-              location.reload();
-            } catch (error) {
-              setToast(error.message);
-            }
-          }}
-        >
-          Обновить каталог
-        </button>
-        <button
-          onClick={async () => {
-            await request("/api/auth/logout", {});
-            location.assign("/login");
-          }}
-        >
-          Выйти
-        </button>
       </header>
       {isReadOnly() && (
         <div className="nora-readonly" role="status">

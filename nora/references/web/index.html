@@ -24,6 +24,7 @@
         <button type="button" data-create-category="body">＋ Добавить референсы фигуры</button>
         <button type="button" data-create-category="outfit">＋ Добавить одежду</button>
         <button type="button" data-create-category="scene">＋ Добавить локацию</button>
+        <button type="button" data-create-category="lora">＋ Добавить набор LoRA</button>
       </div>
     </header>
     <main>
@@ -49,6 +50,7 @@
           ><button id="select-collection" type="button">Выбрать набор</button>
           <a id="selection-link" href="#sheet-controls">К листу · 0</a>
         </div>
+        <button id="append-lora" type="button" hidden>＋ Загрузить фото / видео</button>
         <p id="collection-note" class="section-note"></p>
         <div id="cards" class="cards"></div>
         <p id="empty" hidden>Таких референсов пока нет.</p>
@@ -60,10 +62,10 @@
       </section>
       <aside id="sheet-controls" aria-label="Референсный лист" tabindex="-1">
         <div class="eyebrow">СОБРАТЬ ЛИСТ</div>
-        <h2>Выбранные фотографии <span id="selection-count">0 / 16</span></h2>
+        <h2>Выбранные оригиналы <span id="selection-count">0 / 16</span></h2>
         <p class="hint">
           Порядок: слева направо, затем следующая строка. Стрелки меняют
-          положение фотографии.
+          положение оригинала. Видео скачиваются в ZIP; в PNG входят только фотографии.
         </p>
         <ol id="selection" class="selection"></ol>
         <p id="selection-empty" class="hint">
@@ -138,7 +140,8 @@
     <dialog id="preview">
       <button id="close-preview" class="close" aria-label="Закрыть просмотр">
         ×</button
-      ><img id="preview-image" alt="" />
+      ><img id="preview-image" alt="" /><video id="preview-video" controls playsinline hidden></video>
+      <p id="preview-playback-error" class="hint" hidden>Браузер не смог воспроизвести этот формат. Скачайте оригинал для просмотра.</p>
       <div class="preview-footer">
         <div>
           <strong id="preview-title"></strong>
@@ -152,15 +155,16 @@
         <button type="button" id="close-create" class="close" aria-label="Закрыть создание набора">×</button>
         <div class="eyebrow">НОВЫЙ НАБОР</div>
         <h2 id="create-title">Референсы по ракурсам</h2>
-        <p class="hint">Создадим пустые места для фотографий. Их можно заполнить сейчас или вернуться позже.</p>
+        <p id="create-hint" class="hint">Создадим пустые места для фотографий. Их можно заполнить сейчас или вернуться позже.</p>
         <label>Раздел<select id="create-category" name="category">
           <option value="face">Лицо / причёска</option>
           <option value="body">Фигура / поза</option>
           <option value="outfit">Одежда</option>
           <option value="scene">Локация</option>
+          <option value="lora">LoRA · фото и видео</option>
         </select></label>
         <label>Название набора<input id="create-name" name="title" type="text" maxlength="120" placeholder="Например: Алиса · короткое каре" required /></label>
-        <div><h3>Ракурсы в наборе</h3><div id="create-slots" class="slot-plan"></div></div>
+        <div id="create-slot-plan"><h3>Ракурсы в наборе</h3><div id="create-slots" class="slot-plan"></div></div>
         <p id="create-message" class="form-message" role="status" aria-live="polite"></p>
         <button id="submit-create" class="primary" type="submit">Создать пустой набор</button>
       </form>
@@ -168,12 +172,14 @@
     <dialog id="upload-reference" aria-labelledby="upload-title">
       <form id="upload-reference-form" class="library-form">
         <button type="button" id="close-upload" class="close" aria-label="Закрыть загрузку">×</button>
-        <div class="eyebrow">ДОБАВИТЬ ФОТОГРАФИЮ</div>
+        <div class="eyebrow">ДОБАВИТЬ ОРИГИНАЛЫ</div>
         <h2 id="upload-title">Референс</h2>
         <p id="upload-target" class="hint"></p>
-        <label class="upload-picker">PNG, JPEG или WebP · до 40 МБ<input id="upload-input" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+        <label class="upload-picker"><span id="upload-formats">PNG, JPEG или WebP · до 40 МБ</span><input id="upload-input" type="file" accept="image/png,image/jpeg,image/webp" /></label>
         <img id="upload-preview" class="upload-preview" alt="Выбранная фотография для загрузки" hidden />
-        <p class="hint">Фотография сохраняется целиком. Загрузка не меняет статусы ранее отобранных кадров.</p>
+        <video id="upload-video-preview" class="upload-preview" controls playsinline hidden></video>
+        <ul id="upload-files" class="upload-files"></ul>
+        <p class="hint">Оригиналы сохраняются целиком. Загрузка не запускает обучение или генерацию.</p>
         <progress id="upload-progress" max="100" value="0" hidden aria-label="Загрузка фотографии"></progress>
         <p id="upload-message" class="form-message" role="status" aria-live="polite"></p>
         <button id="submit-upload" class="primary" type="submit" disabled>Сохранить в этот ракурс</button>

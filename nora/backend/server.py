@@ -470,18 +470,12 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
-    def file(self, path, mime):
+    def file(self, path, mime, download=None):
         size = path.stat().st_size
-        start, end, status = 0, size-1, 200
-        value = self.headers.get('Range')
-        if value:
-            match = re.fullmatch(r'bytes=(\d*)-(\d*)', value)
-            if not match: return self.send(416, {'error':'Invalid range'})
-            a,b = match.groups()
-            if not a and b: start = max(0,size-int(b))
-            elif a: start = int(a); end = min(int(b),end) if b else end
-            if start > end or start >= size: return self.send(416, {'error':'Invalid range'})
-            status = 206
+        from reference_library import byte_range
+        try:start,end,status=byte_range(self.headers.get('Range'),size)
+        except LibraryError:
+            self.send_response(416);self.send_header('Content-Range',f'bytes */{size}');self.send_header('Content-Length','0');self.end_headers();return
         self.send_response(status)
         self.send_header('Content-Type',mime)
         self.send_header('Content-Length',str(end-start+1))
@@ -489,6 +483,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control','private, no-store')
         self.send_header('X-Frame-Options','DENY')
         self.send_header('X-Content-Type-Options','nosniff')
+        if download:
+            fallback=re.sub(r'[^A-Za-z0-9._-]','_',download)[:120]
+            self.send_header('Content-Disposition','attachment; filename="'+fallback+'"; filename*=UTF-8\'\''+quote(download,safe=''))
         if status == 206: self.send_header('Content-Range',f'bytes {start}-{end}/{size}')
         self.end_headers()
         try:
@@ -533,6 +530,9 @@ class Handler(BaseHTTPRequestHandler):
                     ident = route[len(prefix):]
                     if not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', ident):
                         return self.send(404, {'error':'Reference not found'})
+                    if operation=='original':
+                        result=self.references().original_file(ident)
+                        return self.file(result['path'],result['kind'],result['filename'] if prefix=='/references/file/' else None)
                     result = getattr(self.references(), operation)(ident)
                     return self.reference_binary(result, download=prefix=='/references/file/')
             relative = route[len('/references/'):]
@@ -608,7 +608,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.headers.get('Content-Type','').split(';')[0] != 'application/json': raise ValueError('application/json required')
             length = int(self.headers.get('Content-Length','0'))
-            body_limit = 4096 if route.startswith('/api/auth/') else MAX_BODY if route == '/api/uploads' else 57 * 1024 * 1024 if route == '/references/api/uploads' else 1024 * 1024
+            body_limit = 4096 if route.startswith('/api/auth/') else MAX_BODY if route == '/api/uploads' else 137 * 1024 * 1024 if route == '/references/api/uploads' else 1024 * 1024
             if not 0 < length <= body_limit: return self.send(413,{'error':'Request too large or empty'})
             payload = json.loads(self.rfile.read(length))
             if not isinstance(payload,dict): raise ValueError('JSON object required')

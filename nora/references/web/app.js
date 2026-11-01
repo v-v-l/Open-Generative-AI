@@ -6,6 +6,7 @@ const categoryNames = {
   outfit: "Одежда",
   scene: "Локация",
   head360: "Голова 360°",
+  lora: "LoRA · фото / видео",
 };
 const statusNames = {
   accepted: "Отобран",
@@ -20,6 +21,9 @@ let catalog = { records: [], missing: {}, collections: [] },
   busy = false,
   exportURL = null;
 let creating = false, uploading = false, uploadTarget = null, uploadFile = null, uploadPreviewURL = null, savedCollection = "";
+let uploadFiles = [], uploadResults = [];
+const isVideo = (item) => item?.media_kind === "video";
+const memberIds = (collection) => collection.category === "lora" ? (collection.items || []) : (collection.slots || []).map((slot) => slot.reference_id);
 const slotLabels = {
   face: ["0° · спереди", "45° · передние ¾", "90° · профиль", "135° · задние ¾", "180° · сзади", "225° · задние ¾", "270° · профиль", "315° · передние ¾"],
   body: ["0° · спереди", "45° · передние ¾", "90° · сбоку", "135° · задние ¾", "180° · сзади", "225° · задние ¾", "270° · сбоку", "315° · передние ¾"],
@@ -91,7 +95,7 @@ function mediaURL(item, type) {
 function visibleRecords() {
   const query = $("#search").value.trim().toLocaleLowerCase("ru");
   const current = collectionInfo();
-  const members = current ? new Set((current.slots || []).map((slot) => slot.reference_id)) : null;
+  const members = current ? new Set(memberIds(current)) : null;
   return catalog.records.filter(
     (item) =>
       inTab(item) &&
@@ -135,13 +139,18 @@ function toggle(item) {
     changeSelection(selected.filter((id) => id !== item.id));
   else if (selected.length === limit)
     message(
-      "В одном листе может быть до 16 фотографий. Уберите одну из выбранных.",
+      "Можно выбрать до 16 оригиналов. Уберите один из выбранных.",
       true,
     );
   else changeSelection([...selected, item.id]);
 }
 function showPreview(item) {
-  $("#preview-image").src = mediaURL(item, "image");
+  $("#preview-playback-error").hidden = true;
+  $("#preview-video").onerror = () => { $("#preview-playback-error").hidden = false; };
+  $("#preview-image").hidden = isVideo(item);
+  $("#preview-video").hidden = !isVideo(item);
+  if (isVideo(item)) $("#preview-video").src = item.video_url || mediaURL(item, "image");
+  else $("#preview-image").src = mediaURL(item, "image");
   $("#preview-image").alt = item.title || item.id;
   $("#preview-title").textContent = item.id + " · " + (item.title || "");
   $("#preview-meta").textContent = [
@@ -180,7 +189,10 @@ function renderCards() {
   const query = $("#search").value.trim().toLocaleLowerCase("ru");
   const matchesSlot = (collection, slot) => !query || [collection.title, slot.title, slot.angle_degrees].join(" ").toLocaleLowerCase("ru").includes(query);
   let entries = items;
-  if (current) {
+  if (current?.category === "lora") {
+    const shown = new Map(items.map((item) => [item.id, item]));
+    entries = memberIds(current).map((id) => shown.get(id)).filter(Boolean);
+  } else if (current) {
     const shown = new Set(items.map((item) => item.id));
     entries = (current.slots || []).flatMap((slot) => slot.reference_id
       ? (shown.has(slot.reference_id) ? [{...record(slot.reference_id), librarySlot: slot, libraryCollection: current}] : [])
@@ -213,11 +225,12 @@ function renderCards() {
       "Посмотреть " + item.id,
     );
     picture.className = "picture";
-    const image = node("img");
-    image.src = mediaURL(item, "thumb");
-    image.alt = item.title || item.id;
-    image.loading = "lazy";
+    const image = node(isVideo(item) ? "video" : "img");
+    image.src = isVideo(item) ? (item.video_url || mediaURL(item, "image")) : mediaURL(item, "thumb");
+    if (isVideo(item)) { image.muted = true; image.preload = "metadata"; image.playsInline = true; }
+    else { image.alt = item.title || item.id; image.loading = "lazy"; }
     picture.append(image, node("span", item.id, "card-id"));
+    if (isVideo(item)) picture.append(node("span", "▶ Видео", "media-kind"));
     const body = node("div", undefined, "body");
     body.append(
       node("h3", item.librarySlot ? slotTitle(item.libraryCollection, item.librarySlot) : item.title || item.id),
@@ -232,8 +245,8 @@ function renderCards() {
       body.append(node("p", item.parent_review.note, "review-note"));
     const choose = button(
       chosen
-        ? "✓ В листе · " + (selected.indexOf(item.id) + 1)
-        : "Добавить в лист",
+        ? (isVideo(item) ? "✓ В ZIP · " : "✓ В листе · ") + (selected.indexOf(item.id) + 1)
+        : isVideo(item) ? "Добавить в ZIP" : "Добавить в лист",
       () => toggle(item),
       (chosen ? "Убрать " : "Добавить ") +
         item.id +
@@ -263,7 +276,7 @@ function renderCards() {
 function collectionRecords() {
   const collection = $("#collection").value;
   const info = collectionInfo(collection);
-  if (info) return (info.slots || []).map((slot) => record(slot.reference_id)).filter(Boolean);
+  if (info) return memberIds(info).map(record).filter(Boolean);
   return (
     collection
       ? catalog.records.filter((item) => item.collection === collection)
@@ -275,6 +288,14 @@ function collectionRecords() {
 function renderCollectionNote() {
   const items = collectionRecords();
   const info = collectionInfo();
+  const append = $("#append-lora");
+  append.hidden = !(info?.category === "lora" && !collectionReadOnly(info));
+  append.disabled = busy || uploading;
+  if (tab === "lora") {
+    $("#collection-note").textContent = items.length + " оригиналов. Для добавления выберите или создайте набор LoRA. Фото и видео сохраняются для будущего датасета; обучение не запускается. Видео доступны для просмотра и ZIP, но не входят в PNG.";
+    $("#select-collection").disabled = busy || !items.length;
+    return;
+  }
   if (info && !collectionReadOnly(info)) {
     const slots = info.slots || [], missing = slots.filter((slot) => !slot.reference_id);
     $("#collection-note").textContent = "Заполнено " + (slots.length - missing.length) + " из " + slots.length + " ракурсов. " +
@@ -303,6 +324,7 @@ function render() {
   renderTabs();
   renderCards();
   const notes = {
+    lora: "Отобранные фотографии и видео для улучшения будущего датасета. Наборы пополняются свободно, без обязательных ракурсов.",
     face: "Портреты и причёски. «Отобран» и «Кандидат» показаны отдельно; выбор не меняет статус.",
     body: "Отдельные фотографии фигуры и поз. В лист попадут оригиналы целиком.",
     head360:
@@ -351,7 +373,7 @@ function move(id, offset) {
 }
 function settings() {
   return {
-    ids: selected.slice(),
+    ids: selected.filter((id) => !isVideo(record(id))),
     columns: Number($("#columns").value),
     cell_width: Number($("#cell-width").value),
     cell_height: Number($("#cell-height").value),
@@ -362,7 +384,7 @@ function sheetDimensions(value) {
   return [value.columns * value.cell_width, Math.ceil(value.ids.length / value.columns) * (value.cell_height + (value.labels ? 28 : 0))];
 }
 function settingsError(value) {
-  if (!value.ids.length) return "Выберите фотографии для листа.";
+  if (!value.ids.length) return selected.length ? "Видео не входят в PNG. Добавьте фотографию или скачайте оригиналы в ZIP." : "Выберите фотографии для листа.";
   if (
     ![value.cell_width, value.cell_height].every(
       (size) => Number.isInteger(size) && size >= 128 && size <= 2048,
@@ -384,9 +406,9 @@ function renderSelection() {
     if (!item) return;
     const row = node("li");
     row.dataset.id = id;
-    const image = node("img");
-    image.src = mediaURL(item, "thumb");
-    image.alt = "";
+    const image = node(isVideo(item) ? "span" : "img");
+    if (isVideo(item)) { image.textContent = "▶"; image.className = "video-icon"; }
+    else { image.src = mediaURL(item, "thumb"); image.alt = ""; }
     const text = node("div");
     text.append(
       node("strong", index + 1 + ". " + id),
@@ -434,7 +456,7 @@ function renderSheet() {
     "--cell-ratio",
     value.cell_width + "/" + (value.cell_height + (value.labels ? 28 : 0)),
   );
-  selected.forEach((id) => {
+  value.ids.forEach((id) => {
     const item = record(id);
     if (!item) return;
     const cell = node("div", undefined, "sheet-cell");
@@ -454,7 +476,7 @@ function renderSheet() {
         sheetDimensions(value)[0] +
         " × " +
         sheetDimensions(value)[1] +
-        " px.");
+        " px." + (selected.some((id) => isVideo(record(id))) ? " Видео исключены из PNG; ZIP сохранит все выбранные оригиналы." : ""));
 }
 function emptySlotCard(collection, slot) {
   const card = node("article", undefined, "card empty-slot");
@@ -492,6 +514,9 @@ function formMessage(id, text, error = false) {
   $(id).classList.toggle("error", error);
 }
 function renderSlotPlan() {
+  const lora = $("#create-category").value === "lora";
+  $("#create-slot-plan").hidden = lora;
+  $("#create-hint").textContent = lora ? "Свободный набор фотографий и видео для будущего датасета. Добавляйте оригиналы в любом порядке, без обязательных ракурсов." : "Создадим пустые места для фотографий. Их можно заполнить сейчас или вернуться позже.";
   $("#create-slots").replaceChildren();
   for (const label of slotLabels[$("#create-category").value] || []) $("#create-slots").append(node("span", label));
 }
@@ -499,7 +524,7 @@ function openCreate(category) {
   if (busy || uploading || creating || catalog.read_only) return;
   $("#create-category").value = category;
   $("#create-name").value = "";
-  $("#create-name").placeholder = {face: "Алиса · короткое каре", body: "Алиса · базовая фигура", outfit: "Чёрный комбинезон", scene: "Пальмовая аллея · закат"}[category];
+  $("#create-name").placeholder = {face: "Алиса · короткое каре", body: "Алиса · базовая фигура", outfit: "Чёрный комбинезон", scene: "Пальмовая аллея · закат", lora: "Алиса · отбор для LoRA"}[category];
   formMessage("#create-message", "");
   renderSlotPlan();
   $("#create-collection").showModal();
@@ -510,40 +535,56 @@ function clearUploadPreview() {
   uploadPreviewURL = null;
   $("#upload-preview").hidden = true;
   $("#upload-preview").removeAttribute("src");
+  $("#upload-video-preview").pause();
+  $("#upload-video-preview").removeAttribute("src");
+  $("#upload-video-preview").load();
+  $("#upload-video-preview").hidden = true;
 }
-function setUploadFile(file) {
+function setUploadFiles(files) {
   clearUploadPreview();
-  uploadFile = null;
-  $("#submit-upload").disabled = true;
-  const maximum = catalog.limits?.max_upload_bytes || 40 * 1024 * 1024;
-  if (!file || !["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-    formMessage("#upload-message", "Выберите фотографию PNG, JPEG или WebP.", true);
-    return;
+  const lora = uploadTarget?.collection.category === "lora";
+  uploadFiles = Array.from(files || []);
+  uploadFile = uploadFiles[0] || null;
+  uploadResults = uploadFiles.map(() => "Ожидает загрузки");
+  let error = "";
+  if (!lora && uploadFiles.length !== 1) error = "На каждый ракурс выберите одну фотографию.";
+  if (uploadFiles.length > 32) error = "За один раз можно загрузить до 32 оригиналов.";
+  for (const file of uploadFiles) {
+    const video = ["video/mp4", "video/webm", "video/quicktime"].includes(file.type);
+    const maximum = video ? (catalog.limits?.max_video_upload_bytes || 100 * 1024 * 1024) : (catalog.limits?.max_upload_bytes || 40 * 1024 * 1024);
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) && !(lora && video)) error = "Допустимы PNG, JPEG, WebP" + (lora ? ", MP4, WebM и MOV." : ".");
+    if (!file.size || file.size > maximum) error = "Файл «" + file.name + "» пустой или превышает лимит " + Math.floor(maximum / 1024 / 1024) + " МБ.";
   }
-  if (!file.size || file.size > maximum) {
-    formMessage("#upload-message", "Фотография должна быть не пустой и не больше 40 МБ.", true);
-    return;
+  renderUploadFiles();
+  $("#submit-upload").disabled = !uploadFiles.length || Boolean(error);
+  if (error) { uploadFiles = []; uploadFile = null; return formMessage("#upload-message", error, true); }
+  if (uploadFile) {
+    uploadPreviewURL = URL.createObjectURL(uploadFile);
+    const preview = uploadFile.type.startsWith("video/") ? $("#upload-video-preview") : $("#upload-preview");
+    preview.src = uploadPreviewURL;
+    preview.hidden = false;
   }
-  uploadFile = file;
-  uploadPreviewURL = URL.createObjectURL(file);
-  $("#upload-preview").src = uploadPreviewURL;
-  $("#upload-preview").hidden = false;
-  $("#upload-preview").onerror = () => {
-    uploadFile = null;
-    $("#submit-upload").disabled = true;
-    formMessage("#upload-message", "Не удалось открыть фотографию. Выберите другой файл.", true);
-  };
-  $("#submit-upload").disabled = false;
-  formMessage("#upload-message", file.name + " · " + (file.size / 1024 / 1024).toFixed(1) + " МБ");
+  formMessage("#upload-message", uploadFiles.length + " файлов готово к загрузке.");
 }
-function openUpload(collection, slot, file = null) {
+function renderUploadFiles() {
+  $("#upload-files").replaceChildren();
+  uploadFiles.forEach((file, index) => $("#upload-files").append(node("li", file.name + " · " + (uploadResults[index] || ""))));
+}
+function setUploadFile(file) { setUploadFiles(file ? [file] : []); }
+function openUpload(collection, slot = null, file = null) {
   if (busy || uploading || collectionReadOnly(collection)) return;
+  const lora = collection.category === "lora";
   uploadTarget = {collection, slot};
   uploadFile = null;
-  clearUploadPreview();
+  uploadFiles = []; uploadResults = [];
+  clearUploadPreview(); renderUploadFiles();
   $("#upload-input").value = "";
-  $("#upload-title").textContent = slotTitle(collection, slot);
-  $("#upload-target").textContent = collection.title + (slot.reference_id ? " · загрузка нового кадра; прежний оригинал сохранится" : " · пустой ракурс");
+  $("#upload-input").multiple = lora;
+  $("#upload-input").accept = "image/png,image/jpeg,image/webp" + (lora ? ",video/mp4,video/webm,video/quicktime,.mov" : "");
+  $("#upload-formats").textContent = lora ? "Фото PNG / JPEG / WebP до 40 МБ; видео MP4 / WebM / MOV до 100 МБ. Можно несколько файлов." : "PNG, JPEG или WebP · до 40 МБ";
+  $("#upload-title").textContent = lora ? "Фото и видео для LoRA" : slotTitle(collection, slot);
+  $("#upload-target").textContent = collection.title + (lora ? " · оригиналы добавятся в конец набора" : slot.reference_id ? " · загрузка нового кадра; прежний оригинал сохранится" : " · пустой ракурс");
+  $("#submit-upload").textContent = lora ? "Добавить оригиналы" : "Сохранить в этот ракурс";
   $("#upload-progress").hidden = true;
   $("#upload-progress").value = 0;
   $("#submit-upload").disabled = true;
@@ -569,11 +610,11 @@ function uploadRequest(payload) {
       if (!event.lengthComputable) return;
       const percentage = Math.round(event.loaded / event.total * 100);
       $("#upload-progress").value = Math.min(95, percentage);
-      formMessage("#upload-message", percentage < 100 ? "Отправка фотографии · " + percentage + "%" : "Проверяю и сохраняю фотографию…");
+      formMessage("#upload-message", percentage < 100 ? "Отправка файла · " + percentage + "%" : "Проверяю и сохраняю оригинал…");
     };
     xhr.onload = () => {
       let data;
-      try { data = JSON.parse(xhr.responseText); } catch { return reject(Error("Сервер вернул неверный ответ.")); }
+      try { data = JSON.parse(xhr.responseText); } catch { return reject(Object.assign(Error("Сервер вернул неверный ответ. Обновите набор и проверьте оригинал перед повтором."), {uncertain: true})); }
       if (xhr.status === 401) {
         location.assign("/login?next=" + encodeURIComponent(location.pathname));
         return reject(Error("Требуется вход."));
@@ -581,8 +622,8 @@ function uploadRequest(payload) {
       if (xhr.status < 200 || xhr.status >= 300) return reject(Error(data.error?.message || data.error || "Загрузка не удалась: " + xhr.status));
       resolve(data);
     };
-    xhr.onerror = () => reject(Error("Нет связи с сервером. Файл не удалось подтвердить; обновите набор перед повторной загрузкой."));
-    xhr.ontimeout = () => reject(Error("Сервер долго не отвечает. Обновите набор, чтобы проверить, сохранился ли файл."));
+    xhr.onerror = () => reject(Object.assign(Error("Нет связи с сервером. Файл не удалось подтвердить; обновите набор перед повторной загрузкой."), {uncertain: true}));
+    xhr.ontimeout = () => reject(Object.assign(Error("Сервер долго не отвечает. Обновите набор, чтобы проверить, сохранился ли файл."), {uncertain: true}));
     xhr.send(JSON.stringify(payload));
   });
 }
@@ -627,7 +668,7 @@ async function load(options = {}) {
     const current = typeof options.collectionId === "string" ? options.collectionId : $("#collection").value || savedCollection;
     $("#collection").replaceChildren(new Option("Текущий раздел", ""));
     const metadata = new Map((catalog.collections || []).map((item) => [item.id, item]));
-    const covered = new Set((catalog.collections || []).flatMap((item) => (item.slots || []).map((slot) => slot.reference_id)).filter(Boolean));
+    const covered = new Set((catalog.collections || []).flatMap((item) => memberIds(item)).filter(Boolean));
     [
       ...new Set(
         [...metadata.keys(), ...catalog.records.filter((item) => !covered.has(item.id)).map((item) => item.collection)].filter(Boolean),
@@ -643,7 +684,7 @@ async function load(options = {}) {
       $("#collection").value = current;
     $("#summary").replaceChildren();
     for (const [count, label] of [
-      [catalog.records.length, "фотографий"],
+      [catalog.records.length, "оригиналов"],
       [
         catalog.records.filter((item) => item.status === "accepted").length,
         "отобрано",
@@ -687,7 +728,7 @@ $("#create-collection-form").onsubmit = async (event) => {
     $("#search").value = "";
     const loaded = await load({collectionId: collection.id});
     $("#create-collection").close();
-    if (loaded) message("Набор «" + collection.title + "» создан. Выберите ракурс и загрузите фотографию.");
+    if (loaded) message("Набор «" + collection.title + "» создан. " + (collection.category === "lora" ? "Добавьте фотографии и видео." : "Выберите ракурс и загрузите фотографию."));
   } catch (error) { formMessage("#create-message", error.message, true); }
   finally {
     creating = false;
@@ -696,7 +737,9 @@ $("#create-collection-form").onsubmit = async (event) => {
     renderCards();
   }
 };
-$("#upload-input").onchange = () => setUploadFile($("#upload-input").files[0]);
+$("#upload-input").onchange = () => setUploadFiles($("#upload-input").files);
+$("#append-lora").onclick = () => { const collection = collectionInfo(); if (collection?.category === "lora") openUpload(collection); };
+$("#preview").addEventListener("close", () => { $("#preview-video").pause(); $("#preview-video").removeAttribute("src"); $("#preview-video").load(); });
 $("#close-upload").onclick = () => $("#upload-reference").close();
 $("#upload-reference").addEventListener("cancel", (event) => { if (uploading) event.preventDefault(); });
 $("#upload-reference").addEventListener("close", clearUploadPreview);
@@ -710,20 +753,33 @@ $("#upload-reference-form").onsubmit = async (event) => {
   $("#close-upload").disabled = true;
   $("#upload-progress").hidden = false;
   formMessage("#upload-message", "Подготавливаю фотографию…");
+  let failed = false;
   try {
-    const data = await readFile(uploadFile);
-    await uploadRequest({collection_id: uploadTarget.collection.id, slot_id: uploadTarget.slot.id, name: uploadFile.name, mime: uploadFile.type, data});
+    for (let index = 0; index < uploadFiles.length; index++) {
+      if (uploadResults[index] === "Сохранён") continue;
+      const file = uploadFiles[index];
+      uploadResults[index] = "Загружается…"; renderUploadFiles();
+      try {
+        const data = await readFile(file);
+        const payload = {collection_id: uploadTarget.collection.id, name: file.name, mime: file.type, data};
+        if (uploadTarget.slot) payload.slot_id = uploadTarget.slot.id;
+        await uploadRequest(payload);
+        uploadResults[index] = "Сохранён";
+      } catch (error) {
+        if (error.uncertain) uploadFile = null;
+        uploadResults[index] = error.message; failed = true;
+      }
+      renderUploadFiles();
+      if (failed) break;
+    }
     $("#upload-progress").value = 100;
-    uploadFile = null;
     tab = uploadTarget.collection.category;
     $("#search").value = "";
     const loaded = await load({collectionId: uploadTarget.collection.id});
-    if (loaded) {
-      $("#upload-reference").close();
-      message("Фотография сохранена: " + uploadTarget.collection.title + " · " + uploadTarget.slot.title + ". Остальные ракурсы можно добавить позже.");
-    } else formMessage("#upload-message", "Фотография сохранена, но каталог не обновился. Закройте окно и нажмите «Обновить».", true);
-  } catch (error) { formMessage("#upload-message", error.message, true); }
-  finally {
+    if (failed) formMessage("#upload-message", "Сохранено: " + uploadResults.filter((status) => status === "Сохранён").length + ". Проверьте ошибку у файла. " + (uploadFile ? "Повторная отправка пропустит сохранённые оригиналы." : "Статус отправки не подтверждён. Закройте окно и проверьте обновлённый набор перед повтором."), true);
+    else if (loaded) { uploadFiles = []; uploadFile = null; $("#upload-reference").close(); message("Оригиналы сохранены в набор «" + uploadTarget.collection.title + "». "); }
+    else { uploadFile = null; formMessage("#upload-message", "Файлы сохранены, но каталог не обновился. Закройте окно и нажмите «Обновить».", true); }
+  } finally {
     uploading = false;
     $("#upload-input").disabled = false;
     $("#close-upload").disabled = false;
@@ -746,14 +802,14 @@ $("#select-collection").onclick = () => {
     message(
       "В наборе " +
         items.length +
-        " фотографий. Выберите до 16 с помощью поиска или карточек.",
+        " оригиналов. Выберите до 16 с помощью поиска или карточек.",
       true,
     );
     return;
   }
   changeSelection(
     items.map((item) => item.id),
-    "Выбран набор: " + items.length + " фотографий.",
+    "Выбран набор: " + items.length + " оригиналов.",
   );
 };
 $("#clear-selection").onclick = () => changeSelection([], "Выбор очищен.");

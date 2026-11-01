@@ -767,3 +767,79 @@ body {
     padding: 0 16px 16px;
   }
 }
+/* One compact studio bar; service navigation shares the existing queue drawer. */
+.nora-header {
+  min-height: 54px;
+  padding: 8px 14px;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+.nora-header > nav {
+  min-width: 0;
+  order: 0;
+  flex-basis: auto;
+}
+.nora-header > .nora-queue-trigger {
+  margin-left: 0;
+}
+.nora-sidebar-menu {
+  padding: 16px 20px;
+  border-bottom: 1px solid #ffffff14;
+}
+.nora-sidebar-menu > .nora-brand {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 14px;
+}
+.nora-sidebar-menu > nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.nora-sidebar-menu > nav > a {
+  grid-column: 1/-1;
+  display: block;
+  color: #d3d3dd;
+  text-decoration: none;
+  font-size: 13px;
+  border: 1px solid #ffffff20;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #ffffff07;
+}
+.nora-sidebar-menu > nav > a:hover {
+  background: #ffffff12;
+}
+.nora-sidebar-menu > nav > a:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: 2px;
+}
+.nora-sidebar-controls h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.nora-queue-dialog > .nora-warning {
+  padding: 0 20px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 800px) {
+  .nora-header {
+    min-height: 52px;
+    padding: 8px 10px;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  .nora-header > nav {
+    order: 0;
+    flex-basis: auto;
+    min-width: 0;
+  }
+  .nora-header > .nora-queue-trigger {
+    margin-left: 0;
+  }
+  .nora-sidebar-menu {
+    padding: 14px 16px;
+  }
+}

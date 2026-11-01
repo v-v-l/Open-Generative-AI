@@ -113,6 +113,20 @@ No model, prompt, seed, queue or workflow controls exist in this library. See
 [reference library manual](../nora/references/README.md). Source originals and
 provenance stay in private versioned apps storage outside Git.
 
+The **LoRA** library tab holds named, freely filled photo/video sets for future
+dataset curation. It supports original uploads, video playback/download and mixed
+ZIP exports, without training or inference. See the reference library manual for
+formats and limits. Video validation needs `ffprobe`; on apps, prepare the rootless
+Ubuntu dependency bundle with `nora/deploy/provision-apps-ffprobe.sh` before backend
+activation. This configures nonsecret `NORA_FFPROBE_BIN` in private `backend.env`
+and saves package provenance under runtime/tools/media-probe-v1. It does not
+install system packages or restart the backend. Existing releases can use the
+same runtime tool; source updates do not reinstall it.
+
+The studio header keeps only the hamburger and studio tabs on desktop/mobile.
+Open **Меню и очередь** for the brand link, reference library, catalog refresh,
+logout and the existing queue controls/history.
+
 
 ## Attaching generation references
 

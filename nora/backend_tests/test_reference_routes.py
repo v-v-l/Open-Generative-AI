@@ -10,6 +10,8 @@ import types
 import unittest
 import urllib.request
 import urllib.error
+import shutil
+import subprocess
 from PIL import Image
 
 SPEC=importlib.util.spec_from_file_location('reference_route_server',Path(__file__).resolve().parents[1]/'backend/server.py')
@@ -33,10 +35,11 @@ class ReferenceRoutes(unittest.TestCase):
     def tearDown(self):
         self.studio.stopping.set();self.studio.wake.set();self.http.shutdown();self.http.server_close();self.thread.join(2);self.studio.worker.join(2)
         self.studio.db.close();self.studio.ownership.close();self.tmp.cleanup()
-    def request(self,path,payload=None,cookie=None,origin='https://media.bp-flow.com'):
+    def request(self,path,payload=None,cookie=None,origin='https://media.bp-flow.com',extra_headers=None):
         headers={'Host':'media.bp-flow.com','Content-Type':'application/json'}
         if origin:headers['Origin']=origin
         if cookie:headers['Cookie']=cookie
+        if extra_headers:headers.update(extra_headers)
         req=urllib.request.Request(self.base+path,data=None if payload is None else json.dumps(payload).encode(),headers=headers)
         return urllib.request.urlopen(req)
     def denied(self,path,status,**kwargs):
@@ -85,5 +88,28 @@ class ReferenceRoutes(unittest.TestCase):
         self.denied('/references/source-inventory.json',404,cookie=cookie)
         self.denied('/references/api/export',400,payload={'ids':['H000','H000']},cookie=cookie)
         self.denied('/references/api/export',400,payload={'ids':['H000'],'cell_width':99999},cookie=cookie)
+
+    def test_lora_upload_video_inline_ranges_download_and_readonly(self):
+        if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):self.skipTest('media tools unavailable')
+        target=Path(self.tmp.name)/'tiny.mp4'
+        subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','color=c=blue:s=32x48:r=2','-t','1','-c:v','libx264','-pix_fmt','yuv420p','-y',str(target)],check=True,timeout=15,capture_output=True)
+        raw=target.read_bytes();cookie=self.login()
+        with self.request('/references/api/collections',{'title':'LoRA samples','category':'lora'},cookie) as response:collection=json.load(response)['collection']
+        payload={'collection_id':collection['id'],'name':'tiny.mp4','mime':'video/mp4','data':base64.b64encode(raw).decode()}
+        self.denied('/references/api/uploads',401,payload=payload)
+        self.denied('/references/api/uploads',403,payload=payload,cookie=cookie,origin='https://evil.example')
+        with self.request('/references/api/uploads',payload,cookie) as response:record=json.load(response)['record']
+        self.denied(record['video_url'],401)
+        with self.request(record['video_url'],cookie=cookie,extra_headers={'Range':'bytes=4-23'}) as response:
+            self.assertEqual(response.status,206);self.assertEqual(response.headers['Content-Type'],'video/mp4')
+            self.assertEqual(response.headers['Content-Range'],f'bytes 4-23/{len(raw)}');self.assertEqual(response.read(),raw[4:24])
+        with self.request(record['video_url'],cookie=cookie,extra_headers={'Range':'bytes=-8'}) as response:self.assertEqual(response.read(),raw[-8:])
+        self.denied(record['video_url'],416,cookie=cookie,extra_headers={'Range':'bytes=999999-'})
+        with self.request(record['download_url'],cookie=cookie) as response:
+            self.assertIn('attachment',response.headers['Content-Disposition']);self.assertEqual(response.read(),raw)
+        self.http.read_only=True
+        self.denied('/references/api/uploads',403,payload=payload,cookie=cookie)
+        self.denied('/references/api/collections',403,payload={'title':'No write','category':'lora'},cookie=cookie)
+        self.assertEqual(self.studio.db.execute('select count(*) from jobs').fetchone()[0],0)
 
 if __name__=='__main__':unittest.main()

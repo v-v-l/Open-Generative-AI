@@ -7,6 +7,23 @@ ComfyUI upload, workflow preparation, queue, seed, model or provider actions.
 
 ## Using the library
 
+### LoRA selection
+
+The **LoRA · фото / видео** tab stores photographs and videos selected for a future
+dataset. Create a named LoRA set, then upload one or several originals. These sets
+append freely without angle slots. Uploads persist across devices and reloads, stay
+marked as user supplied, and never launch training or generation.
+
+Supported originals: PNG/JPEG/WebP up to40 MiB; MP4/WebM/MOV up to100 MiB each.
+Video files are checked for a supported local container, video stream, dimensions
+and duration before storage. Playback uses authenticated byte-range requests;
+browser playback depends on the uploaded codec. Original downloads retain exact
+bytes. Mixed photo/video selections can be downloaded as ZIP (up to16 items and
+256 MiB). PNG sheets include photographs only, with videos explicitly excluded.
+If a multi-file upload fails, retry skips files already saved successfully.
+
+### Photo reference sets
+
 Choose Face, Head 360°, Body, Clothes or Location. Review status stays visible;
 selecting or exporting a candidate does not approve it or add it to training.
 Each card opens the original and offers a direct download. Candidate head angles

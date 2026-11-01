@@ -6,11 +6,13 @@ preserved separately in the original README below the fork notice.
 ## [Unreleased]
 
 ### Added
+- Curate named LoRA photo/video sets with batch uploads, playback, original downloads and mixed ZIP exports; no training is launched.
 - Collapse/expand the photo and video prompt panel while retaining its draft, files and settings.
 - Choose random or fixed seeds explicitly for supported models; inspect the saved seed in the queue.
 - Open the queue from a compact hamburger button as a desktop/mobile sidebar.
 
 ### Fixed
+- Moved branding, references, catalog refresh and logout into the shared hamburger menu on desktop and mobile.
 - Random-seed drafts can obtain price estimates without allocating or changing the eventual generation seed.
 - Filter video references by the selected model capabilities and explain removal of incompatible attachments after model changes.
 - Added mocked transport checks for all three Veo variants and models with first-frame-only input.

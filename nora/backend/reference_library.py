@@ -22,6 +22,8 @@ import threading
 import warnings
 import zipfile
 import uuid
+import subprocess
+import tempfile
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -32,7 +34,9 @@ MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_UPLOAD_BYTES = 40 * 1024 * 1024
 ID = re.compile(r'[A-Za-z0-9_-]{1,80}\Z')
 FORMATS = {'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp'}
-CATEGORIES = {'face','body','outfit','scene'}
+CATEGORIES = {'face','body','outfit','scene','lora'}
+VIDEO_FORMATS = {'.mp4':'video/mp4','.webm':'video/webm','.mov':'video/quicktime'}
+MAX_VIDEO_BYTES = 100 * 1024 * 1024
 
 
 class LibraryError(ValueError):
@@ -59,6 +63,21 @@ def _text(value, limit=500):
 
 def _result(filename, kind, data):
     return {'filename':filename,'kind':kind,'bytes':data}
+
+
+def byte_range(value, size):
+    """A single RFC byte range; invalid/unsatisfied input raises a safe 416."""
+    if not value:return 0,size-1,200
+    match=re.fullmatch(r'bytes=(\d*)-(\d*)',value)
+    if not match or not any(match.groups()):raise LibraryError('Invalid byte range',416)
+    first,last=match.groups()
+    if not first:
+        count=int(last)
+        if count<=0:raise LibraryError('Invalid byte range',416)
+        return max(0,size-count),size-1,206
+    start=int(first);end=min(int(last),size-1) if last else size-1
+    if start>=size or start>end:raise LibraryError('Byte range is outside the file',416)
+    return start,end,206
 
 
 class Library:
@@ -142,6 +161,7 @@ class Library:
             collection={key:source[key] for key in ('id','title','category')}
             collection['read_only']=False
             collection['slots']=[{key:slot[key] for key in ('id','title','reference_id','angle_degrees') if key in slot} for slot in source['slots']]
+            if source['category']=='lora':collection['items']=list(source.get('items',[]))
             collections.append(collection)
         grouped={}
         for identifier,record in self.records.items():
@@ -165,9 +185,12 @@ class Library:
         if not isinstance(title,str) or not title.strip() or len(title)>120 or not _text(title):
             raise LibraryError('A reference set needs a title of up to 120 characters')
         if not isinstance(category,str) or category not in CATEGORIES:
-            raise LibraryError('Category must be face, body, outfit or scene')
+            raise LibraryError('Category must be face, body, outfit, scene or lora')
         collection={'id':'set-'+uuid.uuid4().hex,'title':title.strip(),'category':category,
-                    'slots':self._slots(category,payload.get('slots')),'read_only':False}
+                    'slots':[] if category=='lora' else self._slots(category,payload.get('slots')),'read_only':False}
+        if category=='lora':
+            if payload.get('slots'):raise LibraryError('LoRA datasets contain free items, not angle slots')
+            collection['items']=[]
         with self._mutation():
             data=copy.deepcopy(self.metadata)
             if len(data.get('collections',[]))>=200:
@@ -182,36 +205,43 @@ class Library:
         name=payload.get('name');mime=payload.get('mime');encoded=payload.get('data')
         if not isinstance(name,str) or not name or len(name)>240 or '/' in name or '\\' in name or any(ord(c)<32 for c in name):
             raise LibraryError('Upload name must be a filename without a path')
-        if not isinstance(mime,str) or mime not in ('image/png','image/jpeg','image/webp'):
-            raise LibraryError('Upload a PNG, JPEG or WebP original')
-        if not isinstance(encoded,str) or not encoded or len(encoded)>4*((MAX_UPLOAD_BYTES+2)//3):
-            raise LibraryError('Reference upload exceeds the 40 MiB limit',413)
+        if not isinstance(mime,str) or mime not in (*FORMATS.values(),*VIDEO_FORMATS.values()):
+            raise LibraryError('Upload a PNG, JPEG, WebP, MP4, WebM or MOV original')
+        video=mime in VIDEO_FORMATS.values()
+        maximum=MAX_VIDEO_BYTES if video else MAX_UPLOAD_BYTES
+        if not isinstance(encoded,str) or not encoded or len(encoded)>4*((maximum+2)//3):
+            raise LibraryError('Reference upload exceeds its '+str(maximum//1024//1024)+' MiB limit',413)
         try:
             raw=base64.b64decode(encoded,validate=True)
         except (ValueError,binascii.Error):
             raise LibraryError('Invalid reference image encoding') from None
-        if not raw or len(raw)>MAX_UPLOAD_BYTES:
-            raise LibraryError('Reference upload exceeds the 40 MiB limit',413)
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter('error',Image.DecompressionBombWarning)
-                with Image.open(io.BytesIO(raw)) as image:
-                    expected={'PNG':'image/png','JPEG':'image/jpeg','WEBP':'image/webp'}.get(image.format)
-                    if expected!=mime or getattr(image,'n_frames',1)!=1:
-                        raise LibraryError('MIME type must match a single original image')
-                    if image.width*image.height>MAX_PIXELS:
-                        raise LibraryError('Reference image exceeds the 64 megapixel limit',413)
-                    size=list(image.size)
-                    image.verify()
-                with Image.open(io.BytesIO(raw)) as image:
-                    image.load()
-                    with ImageOps.exif_transpose(image) as oriented:size=list(oriented.size)
-        except LibraryError:
-            raise
-        except (OSError,ValueError,Image.DecompressionBombError,Image.DecompressionBombWarning):
-            raise LibraryError('Upload is not a valid bounded raster image') from None
+        if not raw or len(raw)>maximum:
+            raise LibraryError('Reference upload exceeds its '+str(maximum//1024//1024)+' MiB limit',413)
+        media_metadata={}
+        if video:
+            media_metadata=self._probe_video(raw,mime)
+            size=media_metadata.pop('size')
+        else:
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter('error',Image.DecompressionBombWarning)
+                    with Image.open(io.BytesIO(raw)) as image:
+                        expected={'PNG':'image/png','JPEG':'image/jpeg','WEBP':'image/webp'}.get(image.format)
+                        if expected!=mime or getattr(image,'n_frames',1)!=1:
+                            raise LibraryError('MIME type must match a single original image')
+                        if image.width*image.height>MAX_PIXELS:
+                            raise LibraryError('Reference image exceeds the 64 megapixel limit',413)
+                        size=list(image.size)
+                        image.verify()
+                    with Image.open(io.BytesIO(raw)) as image:
+                        image.load()
+                        with ImageOps.exif_transpose(image) as oriented:size=list(oriented.size)
+            except LibraryError:
+                raise
+            except (OSError,ValueError,Image.DecompressionBombError,Image.DecompressionBombWarning):
+                raise LibraryError('Upload is not a valid bounded raster image') from None
         identifier='U'+uuid.uuid4().hex
-        extension={'image/png':'.png','image/jpeg':'.jpg','image/webp':'.webp'}[mime]
+        extension={**{v:k for k,v in FORMATS.items()},**{v:k for k,v in VIDEO_FORMATS.items()}}[mime]
         relative='uploads/'+identifier+extension
         with self._mutation():
             if len(self.records)>=5000:
@@ -220,16 +250,22 @@ class Library:
             collection=next((item for item in data.get('collections',[]) if item['id']==payload.get('collection_id')),None)
             if collection is None:
                 raise LibraryError('Unknown editable reference set',404)
-            slot=next((item for item in collection['slots'] if item['id']==payload.get('slot_id')),None)
-            if slot is None:
-                raise LibraryError('Unknown reference slot',404)
+            if video and collection['category']!='lora':raise LibraryError('Videos can only be added to a LoRA dataset')
+            if collection['category']=='lora':
+                if payload.get('slot_id'):raise LibraryError('LoRA dataset uploads do not use angle slots')
+                slot={'id':None,'title':name,'reference_id':None}
+            else:
+                slot=next((item for item in collection['slots'] if item['id']==payload.get('slot_id')),None)
+                if slot is None:raise LibraryError('Unknown reference slot',404)
             previous=slot.get('reference_id')
             record={'id':identifier,'path':relative,'category':collection['category'],'collection':collection['id'],
                     'collection_id':collection['id'],'slot_id':slot['id'],'title':slot['title'],'status':'user_supplied',
                     'source_kind':'individual','size':size,'sha256':hashlib.sha256(raw).hexdigest(),'original_name':name,
-                    'mime':mime,'tags':[],'parent_review':{'verdict':'user_supplied','user_approval':False}}
+                    'mime':mime,'media_kind':'video' if video else 'image',**media_metadata,'tags':[],'parent_review':{'verdict':'user_supplied','user_approval':False}}
             if 'angle_degrees' in slot:record['angle_degrees']=slot['angle_degrees']
-            data['records'].append(record);slot['reference_id']=identifier
+            data['records'].append(record)
+            if collection['category']=='lora':collection['items'].append(identifier)
+            else:slot['reference_id']=identifier
             directory=self._path('uploads');directory.mkdir(exist_ok=True)
             target=self._path(relative)
             try:
@@ -243,6 +279,48 @@ class Library:
                 raise
             public=next(item for item in self.catalog()['records'] if item['id']==identifier)
             return {'collection':copy.deepcopy(collection),'record':public,'replaced_reference_id':previous}
+
+    @staticmethod
+    def _probe_video(raw, mime):
+        """Probe a private local file with no network/playlist demuxers enabled."""
+        suffix={value:key for key,value in VIDEO_FORMATS.items()}[mime]
+        try:
+            with tempfile.NamedTemporaryFile(suffix=suffix) as source:
+                source.write(raw);source.flush()
+                result=subprocess.run([os.environ.get('NORA_FFPROBE_BIN','ffprobe'),'-v','error','-protocol_whitelist','file',
+                    '-format_whitelist','mov,matroska,webm','-select_streams','v:0',
+                    '-show_entries','format=format_name,duration:stream=codec_name,codec_type,width,height',
+                    '-of','json',source.name],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=12,check=False)
+            if result.returncode or len(result.stdout)>65536:
+                raise LibraryError('Upload is not a valid supported video')
+            data=json.loads(result.stdout)
+            container=data.get('format',{}).get('format_name','')
+            valid=('matroska' in container or 'webm' in container) if mime=='video/webm' else 'mov' in container
+            streams=data.get('streams',[])
+            stream=streams[0] if streams else {}
+            width,height=stream.get('width',0),stream.get('height',0)
+            duration=float(data.get('format',{}).get('duration',0))
+            if not valid or stream.get('codec_type')!='video' or stream.get('codec_name') in (None,'unknown'):
+                raise LibraryError('Video MIME type must match its actual container and video stream')
+            if type(width) is not int or type(height) is not int or not 0<width<=16384 or not 0<height<=16384 or width*height>MAX_PIXELS or not math.isfinite(duration) or not 0<duration<=86400:
+                raise LibraryError('Video dimensions or duration exceed the supported budget',413)
+            return {'size':[width,height],'duration_seconds':duration}
+        except FileNotFoundError:
+            raise LibraryError('Video uploads are unavailable: ffprobe is not installed',503) from None
+        except subprocess.TimeoutExpired:
+            raise LibraryError('Video validation exceeded its time limit',413) from None
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            if isinstance(exc,LibraryError):raise
+            raise LibraryError('Video could not be validated') from None
+
+    def original_file(self, identifier):
+        """Trusted routing adapter may stream this path; never serialize it to JSON."""
+        record=self._record(identifier)
+        path=self._asset(record)
+        if path.suffix.lower() not in VIDEO_FORMATS:
+            with self._image(record):pass
+        return {'path':path,'filename':identifier+path.suffix.lower(),
+                'kind':{**FORMATS,**VIDEO_FORMATS}[path.suffix.lower()]}
 
     def _path(self, relative):
         if not isinstance(relative,str) or not relative or '\\' in relative:
@@ -282,8 +360,9 @@ class Library:
                     if record.get('collection') is not None and (not isinstance(record['collection'],str) or not ID.fullmatch(record['collection'])):
                         raise LibraryError('Reference manifest has an invalid collection name',503)
                     path = self._path(record.get('path'))
-                    if path.suffix.lower() not in FORMATS:
-                        raise LibraryError('Reference manifest supports raster images only',503)
+                    if path.suffix.lower() not in {**FORMATS,**VIDEO_FORMATS}:
+                        raise LibraryError('Reference manifest supports raster images and video only',503)
+                    if path.suffix.lower() in VIDEO_FORMATS and record['category']!='lora':raise LibraryError('Video references require a LoRA dataset',503)
                     records[identifier] = dict(record)
                 collections=data.get('collections',[])
                 if not isinstance(collections,list) or len(collections)>200:
@@ -297,6 +376,11 @@ class Library:
                     slots=collection.get('slots')
                     if not isinstance(slots,list):
                         raise LibraryError('Reference manifest has invalid slots',503)
+                    if collection['category']=='lora':
+                        items=collection.get('items',[])
+                        if slots or not isinstance(items,list) or len(items)>5000 or any(not isinstance(i,str) or i not in records for i in items) or len(set(items))!=len(items):
+                            raise LibraryError('Invalid LoRA dataset items',503)
+                        seen.add(collection['id']);continue
                     try:
                         self._slots(collection['category'],[{key:value for key,value in slot.items() if key!='reference_id'} for slot in slots])
                     except (LibraryError,AttributeError,TypeError):
@@ -323,7 +407,8 @@ class Library:
         path = self._path(record.get('path'))
         try:
             size = path.stat().st_size
-            if not path.is_file() or not 0 < size <= MAX_FILE_BYTES:
+            maximum=MAX_VIDEO_BYTES if path.suffix.lower() in VIDEO_FORMATS else MAX_FILE_BYTES
+            if not path.is_file() or not 0 < size <= maximum:
                 raise LibraryError('Reference file exceeds its size limit',413)
             return path
         except OSError:
@@ -357,6 +442,13 @@ class Library:
                 public = {key:_text(record[key]) for key in ('category','collection','collection_id','slot_id','title','status') if key in record}
                 public['id'] = identifier
                 public['source_kind'] = 'individual'
+                media_kind='video' if Path(record['path']).suffix.lower() in VIDEO_FORMATS else 'image'
+                public['media_kind']=media_kind
+                public['mime']={**FORMATS,**VIDEO_FORMATS}[Path(record['path']).suffix.lower()]
+                if media_kind=='video':
+                    public['video_url']=base+'/image/'+identifier
+                    duration=record.get('duration_seconds')
+                    if type(duration) in (int,float) and math.isfinite(duration):public['duration_seconds']=duration
                 public['tags'] = [_text(v,150) for v in record.get('tags',[])[:30]] if isinstance(record.get('tags'),list) else []
                 size = record.get('size')
                 if isinstance(size,list) and len(size)==2 and all(type(n) is int and 0<n<=100000 for n in size):
@@ -383,23 +475,25 @@ class Library:
                     'missing':{_text(k,80):[_text(v) for v in values[:30]] for k,values in missing.items() if isinstance(values,list)} if isinstance(missing,dict) else {},
                     'policy':_text(self.metadata.get('policy','')),'collections':self._collections(),
                     'supports_zip':True,'supports_uploads':True,'export_formats':['png','zip'],
-                    'limits':{'max_references':16,'max_columns':8,'max_pixels':MAX_PIXELS,'max_dimension':16384,'max_upload_bytes':MAX_UPLOAD_BYTES}}
+                    'limits':{'max_references':16,'max_columns':8,'max_pixels':MAX_PIXELS,'max_dimension':16384,'max_upload_bytes':MAX_UPLOAD_BYTES,'max_video_bytes':MAX_VIDEO_BYTES,'max_video_upload_bytes':MAX_VIDEO_BYTES}}
 
     def original(self, identifier):
         record=self._record(identifier)
-        with self._image(record):
-            pass
+        video=Path(record['path']).suffix.lower() in VIDEO_FORMATS
+        if not video:
+            with self._image(record):pass
         path=self._asset(record)
         try:
             data=path.read_bytes()
         except OSError:
             raise LibraryError('Reference image is unavailable',404) from None
-        if len(data)>MAX_FILE_BYTES:
+        if len(data)>(MAX_VIDEO_BYTES if video else MAX_FILE_BYTES):
             raise LibraryError('Reference file exceeds its size limit',413)
-        return _result(identifier+path.suffix.lower(),FORMATS[path.suffix.lower()],data)
+        return _result(identifier+path.suffix.lower(),{**FORMATS,**VIDEO_FORMATS}[path.suffix.lower()],data)
 
     def thumbnail(self, identifier, size=320):
         _integer(size,'Thumbnail size',32,1024)
+        if Path(self._record(identifier)['path']).suffix.lower() in VIDEO_FORMATS:raise LibraryError('Use the video playback URL for video references',400)
         with self._image(self._record(identifier)) as original:
             image=ImageOps.contain(original.convert('RGBA'),(size,size),Image.Resampling.LANCZOS)
             canvas=Image.new('RGB',image.size,'white')
@@ -423,6 +517,7 @@ class Library:
 
     def export_sheet(self, payload):
         identifiers,records=self._selection(payload,{'ids','columns','cell_width','cell_height','labels'})
+        if any(Path(record['path']).suffix.lower() in VIDEO_FORMATS for record in records):raise LibraryError('PNG sheets support photographs only; remove videos or download ZIP')
         columns=_integer(payload.get('columns',4),'Columns',1,8)
         width=_integer(payload.get('cell_width',768),'Cell width',32,16384)
         height=_integer(payload.get('cell_height',1024),'Cell height',32,16384)

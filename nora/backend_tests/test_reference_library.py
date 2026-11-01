@@ -10,6 +10,8 @@ import unittest
 from unittest.mock import patch
 import zipfile
 import concurrent.futures
+import shutil
+import subprocess
 
 from PIL import Image
 
@@ -231,6 +233,59 @@ class ReferenceLibraryTest(unittest.TestCase):
             self.assertEqual(composed.getpixel((40,0)),(255,255,255))
             self.assertGreater(composed.getpixel((0,40))[0],240)
             self.assertLess(composed.getpixel((0,40))[1],10)
+
+    def video_bytes(self):
+        if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):self.skipTest('Local media validation tools unavailable')
+        target=self.root/'tiny.mp4'
+        subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','color=c=red:s=32x48:r=2','-t','1',
+                        '-c:v','libx264','-pix_fmt','yuv420p','-y',str(target)],check=True,timeout=15,capture_output=True)
+        return target.read_bytes()
+
+    def test_lora_dataset_appends_images_and_verified_video_preserving_originals(self):
+        collection=self.library.create_collection({'title':'Worthy samples','category':'lora'})['collection']
+        self.assertEqual(collection['slots'],[]);self.assertEqual(collection['items'],[])
+        first=self.upload(collection,slot_id=None)
+        raw=self.video_bytes()
+        second=self.upload(collection,slot_id=None,name='motion.mp4',mime='video/mp4',data=base64.b64encode(raw).decode())
+        video=second['record']
+        self.assertEqual(video['media_kind'],'video');self.assertEqual(video['mime'],'video/mp4')
+        self.assertAlmostEqual(video['duration_seconds'],1,delta=.2)
+        self.assertEqual(self.library.original(video['id'])['bytes'],raw)
+        self.assertEqual(second['collection']['items'],[first['record']['id'],video['id']])
+        reopened=refs.Library(self.root)
+        dataset=next(c for c in reopened.catalog()['collections'] if c['id']==collection['id'])
+        self.assertEqual(dataset['items'],second['collection']['items'])
+        result=reopened.export_zip({'ids':dataset['items']})
+        with zipfile.ZipFile(io.BytesIO(result['bytes'])) as archive:
+            self.assertEqual(archive.read(video['id']+'.mp4'),raw)
+        with self.assertRaisesRegex(refs.LibraryError,'photographs only'):reopened.export_sheet({'ids':dataset['items']})
+
+    def test_video_rejects_invalid_container_mismatch_oversize_and_non_lora_slot(self):
+        collection=self.library.create_collection({'title':'Samples','category':'lora'})['collection']
+        with self.assertRaises(refs.LibraryError):self.upload(collection,slot_id=None,name='fake.mp4',mime='video/mp4')
+        raw=self.video_bytes()
+        with self.assertRaises(refs.LibraryError):self.upload(collection,slot_id=None,name='fake.webm',mime='video/webm',data=base64.b64encode(raw).decode())
+        with patch.object(refs,'MAX_VIDEO_BYTES',3),patch.object(refs.base64,'b64decode',side_effect=AssertionError('must not decode')):
+            with self.assertRaises(refs.LibraryError):self.upload(collection,slot_id=None,name='big.mp4',mime='video/mp4',data=base64.b64encode(raw).decode())
+        face=self.library.create_collection({'title':'Face','category':'face'})['collection']
+        with self.assertRaisesRegex(refs.LibraryError,'only be added'):self.upload(face,name='motion.mp4',mime='video/mp4',data=base64.b64encode(raw).decode())
+        self.assertEqual(len(self.library.catalog()['records']),2)
+
+    def test_video_probe_failure_is_safe_and_bounded(self):
+        with patch.object(refs.subprocess,'run',side_effect=FileNotFoundError):
+            with self.assertRaises(refs.LibraryError) as error:refs.Library._probe_video(b'anything','video/mp4')
+            self.assertEqual(error.exception.status,503)
+        with patch.object(refs.subprocess,'run',side_effect=subprocess.TimeoutExpired('ffprobe',12)):
+            with self.assertRaises(refs.LibraryError) as error:refs.Library._probe_video(b'anything','video/mp4')
+            self.assertEqual(error.exception.status,413)
+
+    def test_byte_ranges_are_bounded_and_invalid_inputs_rejected(self):
+        self.assertEqual(refs.byte_range('bytes=2-5',10),(2,5,206))
+        self.assertEqual(refs.byte_range('bytes=-3',10),(7,9,206))
+        self.assertEqual(refs.byte_range('bytes=4-',10),(4,9,206))
+        for value in ('bytes=-','bytes=-0','bytes=15-20','bytes=4-2','bytes=0-1,3-4','garbage'):
+            with self.assertRaises(refs.LibraryError) as error:refs.byte_range(value,10)
+            self.assertEqual(error.exception.status,416)
 
 
 if __name__=='__main__':unittest.main()

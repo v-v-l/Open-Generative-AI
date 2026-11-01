@@ -1,11 +1,15 @@
 # Nora generation journey
 
-Updated for the seed controls and queue sidebar, 2026-11-01.
+Updated for the compact main menu, LoRA library, seed controls and queue sidebar, 2026-11-01.
 See the deployment ledger for source revisions and live browser verification.
 
 ```mermaid
 flowchart TD
   Login[Sign in] --> Studio[Choose Image or Video Studio]
+  Studio --> Menu[Open hamburger menu and queue]
+  Menu --> Library[Open reference library]
+  Library --> LoRA[Create LoRA set; upload selected photos/videos]
+  LoRA --> Export[Preview or download originals/ZIP; no training]
   Studio --> Model[Choose configured model]
   Model --> Inputs[Attach supported references and enter prompt]
   Inputs --> Settings[Set supported controls; random seed by default]
