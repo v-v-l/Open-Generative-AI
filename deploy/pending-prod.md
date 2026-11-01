@@ -105,3 +105,48 @@ work/reference-gallery-validation.json, work/reference-library-public.png,
 and the matching private candidate receipt. Example public exports are in the
 Nora workspace outputs/reference-library/. No paid inference was performed by
 library implementation or verification.
+
+
+## Promoted — 2026-11-01: reference uploads and explicit attachments
+
+Release `nora-v4-19fa4b7`, source `19fa4b7`.
+
+- [x] Backend activation used fail-fast paused/idle preflight; existing jobs preserved.
+- [x] Reference manifest snapshot saved privately before enabling collection writes.
+- [x] Added authenticated named sets and slot uploads, empty placeholders, original
+  retention on replacement, cross-process file lock and atomic manifest updates.
+- [x] Face/body defaults8 nominal45-degree slots; clothing/location4 slots. Read-only
+  previews and legacy collections disallow modification; uploaded status is explicit.
+- [x] Composer commits file uploads immediately with numbered thumbnails/removal/
+  reorder and supported Start/End/Image/Video/Audio roles. Empty aliases no longer
+  hide populated arrays. Upload-in-progress and missing-placeholder guards added.
+- [x] Cost remains compact and visible; tariffs/budget/native caveats closed under
+  Details. Full model ID remains available without taking the primary row.
+- [x] Requested model IDs, low-quality default, dimensions and literal prompt kept.
+- [x] Expanded private candidate authentication/Host/peer gate passed.
+
+Incident evidence: all6 recent completed production jobs had assets=[]; the OpenAI
+submission audit also had references=[]. No service traceback was present. The old
+picker required a hidden confirmation after choosing files, and empty array alias
+fallback could discard populated reference fields before enqueue. Existing results
+were preserved; no paid inference was repeated for this investigation.
+
+Validation:76 backend tests passed with4 PostgreSQL-only cases skipped. Actual
+original-form browser tests verified2 Qwen refs,2 OpenAI refs and5 distinct H3 roles,
+exact prompts, reorder and pending-upload guards. OpenAI mocked multipart regression
+verified two ordered image[] parts on /images/edits. Isolated reference browser tests
+verified create/upload/reload/replace/error/PNG/ZIP/mobile and read-only behavior.
+Live-public verification is recorded in the external runtime evidence file
+work/studio-public-attachments-verification.json; queue remained paused.
+
+
+Frontend-only follow-up `nora-v4b-picker`, source `5f2b050`: pinned OpenAI snapshot
+versions are distinguished in the picker secondary label while the primary label
+stays compact. Backend remains on `nora-v4-19fa4b7`; its files match the follow-up
+bundle. No extra backend restart or session reset was needed for this label fix.
+Live public check uploaded two real photo assets, captured ordered2-reference
+OpenAI enqueue payload before production job submission, and preserved the exact
+prompt. Production job count stayed6; no library test sets or paid calls created.
+Reference create dialogs exposed8 face slots and4 clothing slots, and upload support
+was reported available. Private candidate gate repeated successfully for the
+frontend-only follow-up; final auth/model-selector smoke evidence is external.

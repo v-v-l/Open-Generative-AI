@@ -5,6 +5,14 @@ preserved separately in the original README below the fork notice.
 
 ## [Unreleased]
 
+## [Nora 0.4.0] - 2026-11-01
+
+- Added user-created reference sets with empty face/body/clothing/location view slots, persistent uploads and safe replacement retaining previous originals.
+- Replaced the hidden upload-confirmation flow with immediate, numbered attachment thumbnails and explicit supported video roles.
+- Fixed empty-array aliases masking populated reference fields; blocked submission while uploading or missing explicitly referenced images.
+- Compacted cost display and collapsed technical details; shortened display labels without changing requested models, quality, dimensions or prompt text.
+- Verified ordered two-image OpenAI multipart transport with mocks and original-byte/EXIF handling for library uploads.
+
 ## [Nora 0.3.0] - 2026-11-01
 
 - Added the private reference-only library at /references/ with shared login.

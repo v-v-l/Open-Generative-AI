@@ -35,8 +35,8 @@ originals; missing directions are shown rather than generated or duplicated.
 Set column count and cell dimensions, inspect the preview, then download PNG.
 Labels default off. The full image is fitted inside each cell with white padding;
 there is no crop or generative alteration. ZIP/individual download preserves the
-original file bytes. The selection is saved in browser local storage; it is not
-a shared server-side collection editor.
+original file bytes. Only the temporary export selection is saved in browser local storage; named
+reference sets and uploaded slot photographs persist on the server.
 
 Limits: 1–16 unique photos, 1–8 columns, longest sheet dimension 16384 and at most
 64 megapixels. One server export runs at a time. PNG rendering changes resolution
