@@ -245,3 +245,23 @@ test("switching H3 media to Veo or a start-only model omits unsupported inputs a
     /не поддерживает.*end/,
   );
 });
+
+test("random seed defaults and sentinel preserve explicit fixed zero and provider limits", () => {
+  const seededCloud = {
+    ...photo,
+    id: "openrouter:seeded-photo",
+    provider: "openrouter",
+    settings: { seed: { type: "boolean" } },
+  };
+  assert.equal(modelFromDescriptor(h3, "i2v").inputs.seed.default, -1);
+  assert.equal(modelFromDescriptor(seededCloud, "t2i").inputs.seed.default, -1);
+  assert.equal(
+    modelFromDescriptor(seededCloud, "t2i").inputs.seed.maxValue,
+    4294967295,
+  );
+  assert.equal(modelFromDescriptor(photo, "t2i").inputs.seed, undefined);
+  for (const seed of [undefined, null, -1, "random"])
+    assert.equal(buildWith(h3, { seed }).seed, null);
+  assert.equal(buildWith(h3, { seed: 0 }).seed, 0);
+  assert.equal(buildWith(h3, { seed: 42 }).seed, 42);
+});

@@ -1,3 +1,9 @@
+export function supportsSeed(model) {
+  return Boolean(
+    model &&
+    (["local", "simplepod"].includes(model.provider) || model.settings?.seed),
+  );
+}
 export function modelDisplayName(model) {
   const remote = model.remote_model || model.id.replace(/^openai:/, "");
   const image = /^gpt-image-(\d+(?:\.\d+)?)(.*)$/i.exec(
@@ -23,6 +29,7 @@ export function modelFromDescriptor(m, mode) {
         title: "Seed (-1 random)",
         default: -1,
         minValue: -1,
+        maxValue: m.provider === "openrouter" ? 4294967295 : 9007199254740991,
         configurable: true,
       };
       continue;
@@ -118,7 +125,11 @@ export function modelFromDescriptor(m, mode) {
     provider: m.provider,
     provider_name:
       m.provider === "openai"
-        ? "OpenAI direct" + ((m.remote_model || m.id).match(/-(20\d{2}-\d{2}-\d{2})$/)?.[1] ? " · " + (m.remote_model || m.id).match(/-(20\d{2}-\d{2}-\d{2})$/)[1] : "")
+        ? "OpenAI direct" +
+          ((m.remote_model || m.id).match(/-(20\d{2}-\d{2}-\d{2})$/)?.[1]
+            ? " · " +
+              (m.remote_model || m.id).match(/-(20\d{2}-\d{2}-\d{2})$/)[1]
+            : "")
         : m.provider === "openrouter"
           ? "OpenRouter"
           : m.provider,

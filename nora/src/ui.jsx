@@ -1,9 +1,11 @@
 import { isReadOnly, availabilityReason, modelUnavailable } from "./runtime.js";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useId } from "react";
 import { runtime, publish, request, refresh, descriptor } from "./runtime.js";
 import { buildJob, historyFor, hideHistory } from "./api.js";
 export { NoraAttachments } from "./attachments.jsx";
 export { NoraComposer } from "./composer.jsx";
+export { NoraSeedControl } from "./seed.jsx";
+import { supportsSeed, modelDisplayName } from "./catalog.js";
 export { referenceInputs as noraReferenceInputs } from "./api.js";
 export function useRuntime() {
   const [, setTick] = useState(0);
@@ -128,9 +130,16 @@ export function NoraSummary({ params }) {
 }
 export function Queue() {
   const state = useRuntime(),
-    [open, setOpen] = useState(false),
     [error, setError] = useState("");
+  const dialog = useRef(null),
+    trigger = useRef(null),
+    titleId = useId();
   if (!state) return null;
+  const pending = state.jobs.filter((job) =>
+    ["queued", "running"].includes(job.status),
+  );
+  const status = state.queue_paused ? "Приостановлена" : "Выполняется";
+  const close = () => dialog.current?.close();
   async function act(path, body = {}) {
     try {
       await request(path, body);
@@ -140,32 +149,91 @@ export function Queue() {
       setError(e.message);
     }
   }
-  const pending = state.jobs.filter((j) =>
-    ["queued", "running"].includes(j.status),
-  );
   return (
-    <section className="nora-queue">
-      <div className="nora-queue-head">
-        <button type="button" onClick={() => setOpen(!open)}>
-          Очередь · {pending.length} {open ? "▴" : "▾"}
-        </button>
-        <span>
-          {state.queue_paused
-            ? "Приостановлена"
-            : "Выполняется последовательно"}
+    <>
+      <button
+        ref={trigger}
+        type="button"
+        className="nora-queue-trigger"
+        aria-label={"Открыть очередь · " + pending.length + " · " + status}
+        aria-haspopup="dialog"
+        onClick={() => dialog.current?.showModal()}
+      >
+        <span aria-hidden="true" className="nora-hamburger">
+          ☰
         </span>
-        <button
-          type="button"
-          disabled={isReadOnly()}
-          onClick={() =>
-            void act("/api/queue", { paused: !state.queue_paused })
+        <span className="nora-queue-count">{pending.length}</span>
+        <span className="nora-queue-status">{status}</span>
+      </button>
+      <dialog
+        ref={dialog}
+        className="nora-queue-dialog"
+        aria-labelledby={titleId}
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          const controls = [
+            ...event.currentTarget.querySelectorAll(
+              'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+            ),
+          ].filter((node) => node.getClientRects().length > 0);
+          const first = controls[0],
+            last = controls.at(-1);
+          if (
+            event.shiftKey &&
+            (document.activeElement === first ||
+              !event.currentTarget.contains(document.activeElement))
+          ) {
+            event.preventDefault();
+            last?.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first?.focus();
           }
-        >
-          {state.queue_paused ? "▶ Запустить очередь" : "Ⅱ Приостановить"}
-        </button>
-      </div>
-      {open && (
-        <div className="nora-queue-body">
+        }}
+        onClose={() => trigger.current?.focus()}
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          const bounds = event.currentTarget.getBoundingClientRect();
+          if (
+            event.clientX < bounds.left ||
+            event.clientX > bounds.right ||
+            event.clientY < bounds.top ||
+            event.clientY > bounds.bottom
+          )
+            close();
+        }}
+      >
+        <header className="nora-sidebar-header">
+          <div>
+            <h2 id={titleId}>Очередь · {pending.length}</h2>
+            <p>{status}</p>
+          </div>
+          <button
+            type="button"
+            autoFocus
+            onClick={close}
+            aria-label="Закрыть очередь"
+          >
+            ×
+          </button>
+        </header>
+        <div className="nora-sidebar-controls">
+          <button
+            type="button"
+            disabled={isReadOnly()}
+            onClick={() =>
+              void act("/api/queue", { paused: !state.queue_paused })
+            }
+          >
+            {state.queue_paused ? "▶ Запустить очередь" : "Ⅱ Приостановить"}
+          </button>
+        </div>
+        {error && (
+          <p className="nora-warning" role="status">
+            {error}
+          </p>
+        )}
+        <div className="nora-queue-body nora-sidebar-jobs">
           {state.jobs.length === 0 && (
             <p>
               Добавьте задания в студии. Выполнение начнётся после «Запустить
@@ -175,7 +243,11 @@ export function Queue() {
           {state.jobs.map((job) => (
             <article key={job.id}>
               <header>
-                <strong>{descriptor(job.model)?.label || job.model}</strong>
+                <strong>
+                  {descriptor(job.model)
+                    ? modelDisplayName(descriptor(job.model))
+                    : job.model}
+                </strong>
                 <span>{job.status}</span>
               </header>
               <p>{job.prompt}</p>
@@ -185,6 +257,9 @@ export function Queue() {
                   {availabilityReason(descriptor(job.model), state)} Выполнение
                   недоступно.
                 </p>
+              )}
+              {supportsSeed(descriptor(job.model)) && job.seed != null && (
+                <small className="nora-job-seed">Seed: {job.seed}</small>
               )}
               {job.billing && job.billing.actual_usd == null && (
                 <small>Стоимость неизвестна</small>
@@ -225,9 +300,8 @@ export function Queue() {
             </article>
           ))}
         </div>
-      )}
-      {error && <p className="nora-warning">{error}</p>}
-    </section>
+      </dialog>
+    </>
   );
 }
 const studios = [
@@ -253,6 +327,7 @@ export function Shell({ ImageStudio, VideoStudio }) {
   return (
     <div className="nora-app">
       <header className="nora-header">
+        <Queue />
         <a href="/" className="nora-brand">
           Open Generative AI <small>Alice</small>
         </a>
@@ -298,7 +373,6 @@ export function Shell({ ImageStudio, VideoStudio }) {
           отключены.
         </div>
       )}
-      <Queue />
       <main className="nora-main">
         <div className="nora-studio-page" hidden={tab !== "image"}>
           <ImageStudio

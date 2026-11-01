@@ -8,6 +8,7 @@ import threading
 import time
 import types
 import unittest
+from unittest.mock import patch
 import urllib.error
 import urllib.request
 
@@ -50,6 +51,29 @@ class QueueTest(unittest.TestCase):
         self.assertTrue(self.studio.paused())
         self.assertEqual(self.calls, [])
         self.assertTrue(all(j['prompt']=='Verbatim [Static shot]' for j in jobs))
+
+    def test_random_seed_is_selected_once_per_submission_and_persisted(self):
+        original_uuid = server.uuid.uuid4
+        generated = iter([types.SimpleNamespace(int=101), original_uuid(),
+                          types.SimpleNamespace(int=202), original_uuid(), original_uuid()])
+        with patch.object(server.uuid, 'uuid4', side_effect=lambda: next(generated)):
+            first = self.studio.enqueue({'kind':'photo','prompt':'random','seed':None})[0]
+            second = self.studio.enqueue({'kind':'photo','prompt':'random','seed':-1})[0]
+            fixed = self.studio.enqueue({'kind':'photo','prompt':'fixed','seed':0})[0]
+        self.assertEqual([first['seed'], second['seed'], fixed['seed']], [101,202,0])
+        saved = json.loads(self.studio.db.execute('SELECT payload FROM jobs WHERE id=?', (first['id'],)).fetchone()[0])
+        self.assertEqual(saved['seed'], 101)
+        self.assertEqual(self.calls, [])
+
+    def test_random_seed_estimate_does_not_mutate_draft_or_generate_seed(self):
+        calls = []
+        sys.modules['engine'].estimate_job = lambda job, assets: calls.append(job) or {'estimated_usd': .12}
+        for seed in (None, '', -1, 42, 0):
+            payload = {'kind':'video','prompt':'estimate','seed':seed}
+            with patch.object(server.uuid, 'uuid4', side_effect=AssertionError('Estimate must not select a random seed')):
+                self.assertEqual(self.studio.estimate(payload)['estimated_usd'], .12)
+            self.assertEqual(payload['seed'], seed)
+            self.assertEqual(calls[-1]['seed'], 0 if seed in (None, '', -1) else seed)
 
     def test_worker_registers_results_once(self):
         job = self.studio.enqueue({'kind':'photo','prompt':'test'})[0]

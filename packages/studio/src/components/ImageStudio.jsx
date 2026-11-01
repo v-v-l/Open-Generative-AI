@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { NoraSummary, NoraAttachments, NoraComposer } from "@nora/ui";
+import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl } from "@nora/ui";
 import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateImage, generateI2I, uploadFile } from "../muapi.js";
@@ -1215,7 +1215,7 @@ export default function ImageStudio({
   const currentMode = imageMode ? "i2i" : "t2i";
   const selectedVariant = imageModelCatalog.variantById.get(selectedModelId);
   const selectedNativeModel = selectedVariant?.model || (imageMode ? getI2IModelById(selectedModelId) : getModelById(selectedModelId));
-  const supplementalInputs = getSupplementalModelInputs(selectedNativeModel);
+  const supplementalInputs = getSupplementalModelInputs(selectedNativeModel).filter(input => input.key !== "seed");
   const referenceVariant = getImageReferenceVariant(
     imageModelCatalog,
     selectedFamily,
@@ -1695,6 +1695,8 @@ export default function ImageStudio({
                   );
                 }}
               />
+
+              <NoraSeedControl modelId={selectedModelId} value={modelParameterValues.seed} onChange={value => setModelParameterValues(values => ({...values, seed:value}))} />
 
               {/* Aspect ratio button */}
               {currentAspectRatios.length > 0 && (<div className="relative">

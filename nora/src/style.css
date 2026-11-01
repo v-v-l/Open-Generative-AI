@@ -563,3 +563,207 @@ body {
     font-size: 10px;
   }
 }
+.nora-header .nora-queue-trigger {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  border: 1px solid #ffffff16;
+  padding: 6px 9px;
+}
+.nora-hamburger {
+  font-size: 17px;
+  line-height: 1;
+}
+.nora-queue-count {
+  border-radius: 10px;
+  background: #ffffff12;
+  padding: 1px 5px;
+  min-width: 18px;
+  text-align: center;
+}
+.nora-queue-status {
+  font-size: 10px;
+  color: #93939e;
+}
+.nora-queue-dialog {
+  position: fixed;
+  inset: 0;
+  margin: 0 0 0 auto;
+  width: min(460px, 100vw);
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  padding: 0;
+  background: #101012;
+  color: #e4e4e7;
+  border: 0;
+  border-left: 1px solid #ffffff20;
+  box-shadow: -20px 0 70px #0007;
+  overflow: hidden;
+}
+.nora-queue-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.nora-queue-dialog::backdrop {
+  background: #0009;
+}
+.nora-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid #ffffff14;
+}
+.nora-sidebar-header h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.nora-sidebar-header p {
+  font-size: 12px;
+  color: #92929c;
+  margin: 5px 0 0;
+}
+.nora-queue-dialog button {
+  border: 1px solid #ffffff20;
+  background: #ffffff07;
+  color: #dddde4;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.nora-queue-dialog button:focus-visible,
+.nora-queue-trigger:focus-visible,
+.nora-seed-control:focus-within {
+  outline: 2px solid #22d3ee;
+  outline-offset: 2px;
+}
+.nora-queue-dialog button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.nora-sidebar-header > button {
+  font-size: 24px;
+  padding: 1px 11px;
+}
+.nora-sidebar-controls {
+  padding: 16px 20px;
+}
+.nora-sidebar-controls button {
+  width: 100%;
+}
+.nora-sidebar-jobs {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  padding: 0 20px 20px;
+  overflow: auto;
+  font-size: 12px;
+}
+.nora-sidebar-jobs article {
+  padding: 16px 0;
+}
+.nora-sidebar-jobs article header {
+  gap: 10px;
+  align-items: start;
+}
+.nora-sidebar-jobs article strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.nora-sidebar-jobs article header > span {
+  font-size: 10px;
+  color: #9999a5;
+}
+.nora-sidebar-jobs p {
+  max-height: 160px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.nora-sidebar-jobs small {
+  display: block;
+  margin: 6px 0;
+}
+.nora-sidebar-jobs article > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+.nora-seed-control {
+  position: relative;
+  font-size: 11px;
+}
+.nora-seed-control > summary {
+  list-style: none;
+  cursor: pointer;
+  border: 1px solid #ffffff12;
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: #d1d1da;
+  background: #16161a;
+  white-space: nowrap;
+}
+.nora-seed-control > div {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  z-index: 90;
+  width: min(290px, 75vw);
+  padding: 14px;
+  border: 1px solid #ffffff20;
+  border-radius: 9px;
+  background: #18181c;
+  box-shadow: 0 10px 40px #000a;
+  line-height: 1.6;
+}
+.nora-seed-control label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nora-seed-control input[type="checkbox"] {
+  accent-color: #22d3ee;
+}
+.nora-seed-control .nora-fixed-seed {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  margin-top: 12px;
+}
+.nora-seed-control input[type="number"] {
+  width: 100%;
+  padding: 8px;
+  background: #0b0b0d;
+  color: white;
+  border: 1px solid #ffffff25;
+  border-radius: 6px;
+}
+.nora-seed-control small {
+  display: block;
+  color: #92929e;
+  font-size: 10px;
+  margin-top: 10px;
+}
+@media (max-width: 800px) {
+  .nora-queue-status {
+    display: none;
+  }
+  .nora-header {
+    gap: 12px;
+  }
+  .nora-sidebar-header {
+    padding: 16px;
+  }
+  .nora-sidebar-controls {
+    padding: 12px 16px;
+  }
+  .nora-sidebar-jobs {
+    padding: 0 16px 16px;
+  }
+}

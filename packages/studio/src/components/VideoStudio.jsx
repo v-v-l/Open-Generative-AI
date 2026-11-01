@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
-import { NoraSummary, NoraAttachments, NoraComposer, noraReferenceInputs } from "@nora/ui";
+import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, noraReferenceInputs } from "@nora/ui";
 import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateVideo, generateI2V, processV2V, uploadFile } from "../muapi.js";
@@ -2954,7 +2954,7 @@ export default function VideoStudio({
                   quality={selectedQuality}
                   onProfileChange={(value) => handleGroupedOptionChange("profile", value)}
                   onQualityChange={setSelectedQuality}
-                  inputs={supplementalInputs}
+                  inputs={supplementalInputs.filter(input => input.key !== "seed")}
                   values={modelParameterValues}
                   onChange={handleModelParameterChange}
                   open={openDropdown === "parameters"}
@@ -2963,13 +2963,15 @@ export default function VideoStudio({
                 />
               ) : (
                 <ModelParameterControls
-                  inputs={supplementalInputs}
+                  inputs={supplementalInputs.filter(input => input.key !== "seed")}
                   values={modelParameterValues}
                   onChange={handleModelParameterChange}
                   open={openDropdown === "parameters"}
                   onToggle={toggleDropdown("parameters")}
                 />
               )}
+
+              <NoraSeedControl modelId={selectedModel} value={modelParameterValues.seed} onChange={value => setModelParameterValues(values => ({...values, seed:value}))} />
 
               {/* Aspect ratio btn */}
               {showAr && getCurrentAspectRatios(selectedModel).length > 0 && (

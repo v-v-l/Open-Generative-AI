@@ -148,3 +148,39 @@ with keyboard Enter or Space and expose their expanded state to screen readers.
 Switching generation models preserves compatible references. References unsupported
 by the new model are excluded with a visible notice; Veo retains Start/End frames,
 while a start-only model retains only Start.
+
+## Qualifying a newly selected model
+
+A catalog entry establishes advertised endpoint capabilities, not successful studio
+generation. Before relying on a new model, verify its provider-specific modes:
+
+1. Check the current endpoint schema, reference roles/counts, parameter ranges and
+   pricing. Native model features are exposed only when this endpoint supports them.
+2. Use mocked submission tests to verify exact prompt, ordered references, file
+   contents, dimensions, seed handling and the absence of unsupported parameters.
+3. With an explicitly authorized generation, exercise each mode that will actually
+   be used (for example prompt-only, first frame, first+last frame). Check the saved
+   submission and final media for reference fidelity, framing, motion/audio and
+   usable output; compare quoted and reported costs. Do not infer success of untested
+   reference modes from a text-only result.
+4. Keep model/version/provider and tested modes in the review evidence. Retest the
+   affected modes when the endpoint, model version or studio adapter changes.
+
+Paid checks are not automatic. A fixed seed helps repeat an experiment where the
+provider supports it, but does not guarantee identical output across model updates.
+
+### Random seeds and the queue sidebar
+
+Models that support seeds show a compact **Seed · случайный** control by default.
+Each new job asks the server for a fresh random seed, which is stored with that job.
+Turn off **Новый seed для каждого задания** to enter a fixed seed; zero is a valid
+fixed value. Saved manual seeds remain fixed, and retrying a job retains its saved
+seed. Models without seed support, including the current OpenAI image models, do
+not show a seed control or claim reproducibility from a seed.
+
+Open the queue with the hamburger, job count and status in the header. The sidebar
+contains start/pause, job history, cancel/retry and result downloads. Escape, the
+close button or a desktop backdrop click closes it and returns focus to the trigger;
+keyboard focus stays within the open sidebar. Supported models show their stored
+actual seed on the job card. The same sidebar works on mobile without a separate
+full-width queue bar.

@@ -245,7 +245,12 @@ class Studio:
         if estimator is None:
             return {'available':False, 'actual_usd':None, 'uncertainty':'No estimator is available for this model'}
         try:
-            result = estimator(dict(payload), refs)
+            estimate_payload = dict(payload)
+            # Seed does not affect pricing; resolve only the validation placeholder here.
+            # Enqueue independently selects and persists the actual random seed.
+            if estimate_payload.get('seed') in (None, '', -1):
+                estimate_payload['seed'] = 0
+            result = estimator(estimate_payload, refs)
             if not isinstance(result, dict):
                 return {'available':False, 'uncertainty':'Estimator returned no price'}
             return clean_metadata(result)
