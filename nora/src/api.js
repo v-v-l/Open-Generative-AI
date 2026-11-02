@@ -32,7 +32,7 @@ export function refsFor(params, m) {
           "Прикрепите файл заново: нужен референс, загруженный в нашу студию",
         );
       if (!refs.some((a) => a.id === id && a.role === role))
-        refs.push({ id, role });
+        refs.push({ id, role, ...(role === "video" && runtime.assetMetadata[url]?.include_audio !== undefined ? {include_audio: runtime.assetMetadata[url].include_audio} : {}) });
     }
   };
   if (m.kind === "photo")
@@ -185,6 +185,9 @@ export function historyFor(kind) {
           aspect_ratio: j.aspect_ratio || "",
           timestamp: j.updated_at || j.created_at,
           type: kind === "photo" ? "image" : "video",
+          name: o.name,
+          mime: o.mime,
+          job: j,
         })),
     );
 }

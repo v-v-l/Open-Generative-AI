@@ -1047,3 +1047,10 @@ body {
   outline-offset: 2px;
 }
 .nora-attachment-replace.disabled { opacity: 0.4; cursor: default; }
+
+.nora-gallery-actions { display: flex; flex-wrap: wrap; gap: .5rem; padding: .75rem; background: #111; }
+.nora-gallery-actions button { color: #e2e8f0; padding: .5rem .65rem; min-height: 40px; border: 1px solid #475569; border-radius: .5rem; font-size: .8rem; }
+.nora-gallery-actions button:hover { background: #1e293b; }
+.nora-gallery-actions button:focus-visible { outline: 2px solid #22d3ee; outline-offset: 2px; }
+.nora-gallery-actions button:disabled { opacity: .5; }
+.nora-gallery-actions .nora-warning { width: 100%; }

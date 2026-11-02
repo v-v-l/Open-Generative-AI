@@ -1,7 +1,8 @@
-import React, { useId, useState } from "react";
+import React, { useId, useState, useEffect } from "react";
 import { PromptComposer } from "../../packages/studio/src/components/prompt/PromptComposer.jsx";
 import { descriptor, isUploading } from "./runtime.js";
 import { referenceInputs, refsFor } from "./api.js";
+import { pastedImages } from "./referenceValidation.js";
 import { modelDisplayName } from "./catalog.js";
 
 // Hide, rather than unmount, so draft text, upload controls and settings survive.
@@ -13,6 +14,11 @@ export function NoraComposer({
   children,
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    const expand = (event) => { if (event.detail?.kind === kind) setCollapsed(false); };
+    window.addEventListener("nora-recreate", expand);
+    return () => window.removeEventListener("nora-recreate", expand);
+  }, [kind]);
   const id = useId(),
     model = descriptor(modelId);
   let count = 0;
@@ -52,7 +58,13 @@ export function NoraComposer({
           {collapsed ? "Развернуть ↑" : "Свернуть ↓"}
         </button>
       </div>
-      <div id={id} className="nora-composer-body" hidden={collapsed}>
+      <div id={id} className="nora-composer-body" hidden={collapsed}
+        onPaste={(event) => {
+          const files = pastedImages(event.clipboardData);
+          if (!files.length) return;
+          event.preventDefault();
+          window.dispatchEvent(new CustomEvent("nora-paste-images", {detail: {modelId, files}}));
+        }}>
         {children}
       </div>
     </PromptComposer>

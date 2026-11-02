@@ -136,6 +136,7 @@ export function modelFromDescriptor(m, mode) {
     inputs,
     hasPrompt: true,
     promptRequired: true,
+    imageOptional: !m.required_roles?.image && !m.required_roles?.start,
   };
   if (m.kind === "photo" && m.roles.image) {
     result.imageField = "images_list";
@@ -149,7 +150,7 @@ export function modelFromDescriptor(m, mode) {
       maxItems: m.roles.image,
     };
   }
-  if (m.kind === "video" && mode === "i2v") {
+  if (m.kind === "video") {
     if (m.roles.start) {
       result.imageField = "image_url";
       inputs.image_url = {
@@ -212,7 +213,9 @@ export function installCatalog(registry, descriptors) {
   registry.t2vModels.splice(
     0,
     registry.t2vModels.length,
-    ...video.map((m) => modelFromDescriptor(m, "t2v")),
+    ...video
+      .filter((m) => !Object.values(m.required_roles || {}).some((minimum) => minimum > 0))
+      .map((m) => modelFromDescriptor(m, "t2v")),
   );
   registry.i2vModels.splice(
     0,

@@ -6,6 +6,7 @@ import {
   isReadOnly,
   isUploading,
 } from "./runtime.js";
+import { pasteImageRole } from "./referenceValidation.js";
 import { uploadFile } from "./api.js";
 
 // Files commit directly to the same arrays used by submission; no hidden picker draft.
@@ -18,6 +19,14 @@ export function NoraAttachments({
   onChange,
 }) {
   const [error, setError] = useState("");
+  const root = useRef(null), pasteHandler = useRef(null), preferredRole = useRef(null);
+  useEffect(() => {
+    const listener = (event) => {
+      if (root.current?.getClientRects().length) pasteHandler.current?.(event.detail);
+    };
+    window.addEventListener("nora-paste-images", listener);
+    return () => window.removeEventListener("nora-paste-images", listener);
+  }, []);
   const m = descriptor(modelId);
   const uploadContext = useRef({ modelId, epoch: 0, mounted: true });
   if (uploadContext.current.modelId !== modelId) {
@@ -160,6 +169,12 @@ export function NoraAttachments({
       publish();
     }
   }
+  pasteHandler.current = (detail) => {
+    if (detail?.modelId !== modelId) return;
+    const role = pasteImageRole(m, values, preferredRole.current);
+    if (!role) { setError("Эта модель не поддерживает изображения."); return; }
+    void attach(role, detail.files);
+  };
   function move(role, index, offset) {
     const next = values[role].slice(),
       other = index + offset;
@@ -167,12 +182,14 @@ export function NoraAttachments({
     commit(role, next);
   }
   return (
-    <div className="nora-attachments" aria-label="Прикреплённые референсы">
+    <div ref={root} className="nora-attachments" aria-label="Прикреплённые референсы"
+      onFocusCapture={(event) => { preferredRole.current = event.target.dataset.role || event.target.closest("[data-role]")?.dataset.role || null; }} >
       <div className="nora-attachment-row">
         {enabled.map((role) => (
           <React.Fragment key={role}>
             {values[role].map((url, index) => (
               <div
+                data-role={role}
                 className={"nora-attachment nora-attachment-" + role}
                 key={url}
               >
@@ -295,7 +312,7 @@ export function NoraAttachments({
           : total
             ? `Прикреплено референсов: ${total}`
             : enabled.length
-              ? "Прикрепите референсы или опишите новый кадр"
+              ? "Опишите кадр или вставьте фото из буфера (Ctrl/⌘+V)"
               : "Эта модель создаёт кадр по описанию"}
         {error && <span className="nora-warning"> · {error}</span>}
       </div>

@@ -232,3 +232,27 @@ Legacy read-only sets remain protected. See the library manual for API behavior.
 Studio attachment cards also offer **Заменить**, retaining role and position.
 The current attachment stays until the upload succeeds; failure retains it.
 The existing × removes an attachment from the prompt. Neither action runs a model.
+
+### Prompt-only requests, clipboard images and recreation
+
+An endpoint that permits text-only generation can run without a photograph even
+when the reference-capable variant is selected. Required reference roles still
+follow the actual endpoint catalog. H3 Image references count independently from
+Start/End guides; cloud last-frame requests still require a first frame.
+
+Paste an image with Ctrl/⌘V inside the photo/video composer to attach it through
+the same upload path as the file picker. Text-only paste remains normal text.
+The default role is Image where supported, or Start for first-frame-only models;
+focusing a supported attachment role chooses that role for the paste. Existing
+format/count/size limits and pending-upload guards apply.
+
+**Пересоздать** on a gallery or queue item opens its model, literal prompt,
+parameters, saved seed and original reference roles for editing. It expands the
+composer and selects the appropriate studio without enqueueing or generating.
+Missing originals or incompatible current model capabilities leave the current
+draft unchanged and show an error. Wait for current uploads to finish first.
+**Повторить** remains an explicit retry of a failed job with its saved inputs.
+
+Gallery download buttons retrieve the authenticated original from
+`/media/ID?download=1`, retaining its filename, MIME type and original bytes.
+The same URL without the flag stays available for inline image/video viewing.

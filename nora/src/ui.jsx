@@ -4,6 +4,9 @@ import { runtime, publish, request, refresh, descriptor } from "./runtime.js";
 import { buildJob, historyFor, hideHistory } from "./api.js";
 export { NoraAttachments } from "./attachments.jsx";
 export { NoraComposer } from "./composer.jsx";
+export { noraReferenceError } from "./referenceValidation.js";
+import { NoraGalleryActions } from "./galleryActions.jsx";
+export { NoraGalleryActions, noraDownloadOriginal } from "./galleryActions.jsx";
 export { NoraSeedControl } from "./seed.jsx";
 export { NoraParameterControls } from "./parameters.jsx";
 import { supportsSeed, modelDisplayName } from "./catalog.js";
@@ -135,6 +138,11 @@ export function Queue() {
   const dialog = useRef(null),
     trigger = useRef(null),
     titleId = useId();
+  useEffect(() => {
+    const closeOnRestore = () => dialog.current?.close();
+    window.addEventListener("nora-recreate", closeOnRestore);
+    return () => window.removeEventListener("nora-recreate", closeOnRestore);
+  }, []);
   if (!state) return null;
   const pending = state.jobs.filter((job) =>
     ["queued", "running"].includes(job.status),
@@ -332,6 +340,7 @@ export function Queue() {
                     Повторить
                   </button>
                 )}
+                <NoraGalleryActions job={job} />
                 {job.outputs?.map((o) => (
                   <a key={o.url} href={o.url} download={o.name}>
                     Скачать {o.kind}
@@ -362,8 +371,17 @@ export function Shell({ ImageStudio, VideoStudio }) {
       setToast("Задание добавлено в постоянную очередь");
       setTimeout(() => setToast(""), 5000);
     };
+    const recreate = (event) => {
+      setTab(event.detail.kind === "photo" ? "image" : "video");
+      setToast("Промпт, параметры и исходные файлы открыты для редактирования");
+      setTimeout(() => setToast(""), 5000);
+    };
     window.addEventListener("nora-enqueued", listener);
-    return () => window.removeEventListener("nora-enqueued", listener);
+    window.addEventListener("nora-recreate", recreate);
+    return () => {
+      window.removeEventListener("nora-enqueued", listener);
+      window.removeEventListener("nora-recreate", recreate);
+    };
   }, []);
   return (
     <div className="nora-app">

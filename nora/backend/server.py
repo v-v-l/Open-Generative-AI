@@ -205,12 +205,19 @@ class Studio:
         data = json.loads(row['payload'])
         public_assets = []
         for ref in data.get('assets', []):
-            asset = self.db.execute('SELECT id,name,mime FROM assets WHERE id=?', (ref.get('id',''),)).fetchone()
+            asset = self.db.execute('SELECT * FROM assets WHERE id=?', (ref.get('id',''),)).fetchone()
+            public = {'id':ref.get('id',''), 'role':ref.get('role','image')}
             if asset:
-                public = dict(asset)
-                public.update({'role':ref.get('role','image'),'url':'/media/'+asset['id']})
-                if 'include_audio' in ref: public['include_audio'] = ref['include_audio']
-                public_assets.append(public)
+                path = Path(asset['path']).resolve()
+                public.update({key:asset[key] for key in ('name','mime')})
+                if path.is_relative_to(self.root) and path.is_file():
+                    public['url'] = '/media/'+asset['id']
+                else:
+                    public['missing'] = True
+            else:
+                public['missing'] = True
+            if 'include_audio' in ref: public['include_audio'] = ref['include_audio']
+            public_assets.append(public)
         data['assets'] = public_assets
         data.update({k: row[k] for k in ('id','status','created_at','updated_at','error')})
         data['progress'] = json.loads(row['progress']) if row['progress'] else None
@@ -582,7 +589,8 @@ class Handler(BaseHTTPRequestHandler):
             if not row: return self.send(404,{'error':'Not found'})
             path = Path(row['path']).resolve()
             if not path.is_relative_to(studio.root) or not path.is_file(): return self.send(404,{'error':'Not found'})
-            return self.file(path,row['mime'])
+            download = parse_qs(urlsplit(self.path).query).get('download') == ['1']
+            return self.file(path,row['mime'],row['name'] if download else None)
         if route.startswith('/api/'): return self.send(404,{'error':'Not found'})
         if route == '/directcut':
             self.send_response(302);self.send_header('Location','/directcut/');self.end_headers();return

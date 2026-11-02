@@ -1,7 +1,8 @@
 "use client";
 
+import { NoraGalleryActions, noraDownloadOriginal } from "@nora/ui";
 import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
-import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, NoraParameterControls, noraReferenceInputs } from "@nora/ui";
+import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, NoraParameterControls, noraReferenceInputs, noraReferenceError } from "@nora/ui";
 import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateVideo, generateI2V, processV2V, uploadFile } from "../muapi.js";
@@ -99,23 +100,6 @@ import usePromptMenu from "./prompt/usePromptMenu.js";
 import en from "../messages/en/videoStudio.json";
 import zh from "../messages/zh/videoStudio.json";
 import { resolveCopy } from "../i18nUtils";
-
-async function downloadFile(url, filename) {
-  try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-  } catch {
-    window.open(url, "_blank");
-  }
-}
 
 function mergeReferenceUrls(current, incoming, limit) {
   return [...new Set([...current, ...incoming])].slice(0, limit);
@@ -1289,6 +1273,35 @@ export default function VideoStudio({
     [applySelectedVariant],
   );
 
+  useEffect(() => {
+    const restore = ({ detail }) => {
+      if (detail.kind !== "video") return;
+      const { params, media } = detail;
+      const family = videoModelCatalog.familyByVariantId.get(detail.model);
+      const mode = detail.assets.length ? "i2v" : "t2v";
+      const variant = getFamilyVariant(videoModelCatalog, family, mode, detail.model);
+      if (!variant) { setGenerateError("Исходная модель не найдена в студии"); return; }
+      applySelectedVariant(variant, mode, family);
+      setModelParameterValues({ ...createModelParameterValues(variant.model), ...params });
+      setSelectedAr(params.aspect_ratio ?? "");
+      setSelectedDuration(params.duration ?? "");
+      setSelectedResolution(params.resolution ?? "");
+      setSelectedQuality(params.quality ?? "");
+      setPrompt(params.prompt ?? "");
+      setUploadedImageUrls([...media.imageUrls]);
+      setUploadedEndImageUrl(media.endImageUrl);
+      setUploadedVideoUrls([...media.videoUrls]);
+      setUploadedAudioUrls([...media.audioUrls]);
+      setGenerateError(null);
+      setOpenDropdown(null);
+      setFullscreenUrl(null);
+      setShowCanvas(false);
+      requestAnimationFrame(() => { textareaRef.current?.focus(); textareaRef.current?.scrollIntoView({ block: "nearest" }); });
+    };
+    window.addEventListener("nora-recreate", restore);
+    return () => window.removeEventListener("nora-recreate", restore);
+  }, [applySelectedVariant]);
+
   // ── Persistence: Load ────────────────────────────────────────────────────
   useEffect(() => {
     try {
@@ -2109,6 +2122,9 @@ export default function VideoStudio({
           audioUrls: uploadedAudioUrls,
         };
 
+    const referenceError = noraReferenceError(selectedModel, workflowMedia);
+    if (referenceError) { alert(referenceError); return; }
+
     if (!selectedWorkflowId && uploadedVideoUrls.length > 0 && capabilities.video.maxItems === 0) {
       alert(`${selectedFamily.name} does not support video references.`);
       return;
@@ -2524,7 +2540,7 @@ export default function VideoStudio({
                       title={copy.gallery.download}
                       onClick={(e) => {
                         e.stopPropagation();
-                        downloadFile(entry.url, `video-${entry.id || idx}.mp4`);
+                        noraDownloadOriginal(entry);
                       }}
                       className="p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-primary hover:text-black transition-all border border-white/10"
                     >
@@ -2576,7 +2592,7 @@ export default function VideoStudio({
                         kind: "download",
                         label: copy.gallery.download,
                         onSelect: () =>
-                          downloadFile(entry.url, `video-${entry.id || idx}.mp4`),
+                          noraDownloadOriginal(entry),
                       },
                       isSeedance2 && {
                         kind: "extend",
@@ -2598,6 +2614,7 @@ export default function VideoStudio({
                     ]}
                   />
 
+                  <NoraGalleryActions entry={entry} />
                   {/* Prompt & Details */}
                   <div className="p-3 bg-black/80 backdrop-blur-sm border-t border-white/5 flex-1 flex flex-col justify-between gap-2">
                     <p className="text-white/70 text-xs line-clamp-3 leading-relaxed" title={entry.prompt}>

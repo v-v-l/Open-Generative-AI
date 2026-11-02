@@ -1,7 +1,8 @@
 "use client";
 
+import { NoraGalleryActions, noraDownloadOriginal } from "@nora/ui";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, NoraParameterControls } from "@nora/ui";
+import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, NoraParameterControls, noraReferenceError } from "@nora/ui";
 import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateImage, generateI2I, uploadFile } from "../muapi.js";
@@ -63,23 +64,6 @@ import zh from "../messages/zh/imageStudio.json";
 import { resolveCopy } from "../i18nUtils";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
-
-async function downloadImage(url, filename) {
-  try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-  } catch {
-    window.open(url, "_blank");
-  }
-}
 
 // ─── UploadButton (inline picker) ───────────────────────────────────────────
 
@@ -1266,6 +1250,32 @@ export default function ImageStudio({
     applySelectedVariant(variant, mode, family);
   }, [applySelectedVariant]);
 
+  useEffect(() => {
+    const restore = ({ detail }) => {
+      if (detail.kind !== "photo") return;
+      const { params, media } = detail;
+      const family = imageModelCatalog.familyByVariantId.get(detail.model);
+      const mode = media.imageUrls.length ? "i2i" : "t2i";
+      const variant = getFamilyVariant(imageModelCatalog, family, mode, detail.model);
+      if (!variant) { setGenerateError("Исходная модель не найдена в студии"); return; }
+      applySelectedVariant(variant, mode, family);
+      setModelParameterValues({ ...createModelParameterValues(variant.model), ...params });
+      setSelectedAr(params.aspect_ratio ?? "");
+      const qualityField = mode === "i2i" ? getQualityFieldForI2IModel(detail.model) : getQualityFieldForModel(detail.model);
+      setSelectedQuality(params[qualityField] ?? null);
+      setPrompt(params.prompt ?? "");
+      setUploadedImageUrls([...media.imageUrls]);
+      setSwapImageUrl(null);
+      setBatchSize(1);
+      setGenerateError(null);
+      setDropdownOpen(null);
+      setFullscreenUrl(null);
+      requestAnimationFrame(() => { textareaRef.current?.focus(); textareaRef.current?.scrollIntoView({ block: "nearest" }); });
+    };
+    window.addEventListener("nora-recreate", restore);
+    return () => window.removeEventListener("nora-recreate", restore);
+  }, [applySelectedVariant]);
+
   // ── Textarea auto-resize ─────────────────────────────────────────────────
   // ── Upload picker callbacks ──────────────────────────────────────────────
   const handleUploadSelect = useCallback(
@@ -1354,8 +1364,10 @@ export default function ImageStudio({
   const handleGenerate = async () => {
     if (generating) return;
 
+    const referenceError = noraReferenceError(selectedModelId, {imageUrls: uploadedImageUrls});
+    if (referenceError) { alert(referenceError); return; }
     if (imageMode) {
-      if (uploadedImageUrls.length === 0) {
+      if (!selectedNativeModel?.imageOptional && uploadedImageUrls.length === 0) {
         alert(copy.errors.uploadReferenceFirst);
         return;
       }
@@ -1493,7 +1505,7 @@ export default function ImageStudio({
                     title={copy.gallery.download}
                     onClick={(e) => {
                       e.stopPropagation();
-                      downloadImage(entry.url, `muapi-${entry.id || idx}.jpg`);
+                      noraDownloadOriginal(entry);
                     }}
                     className="p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-primary hover:text-black transition-all border border-white/10"
                   >
@@ -1531,7 +1543,7 @@ export default function ImageStudio({
                       kind: "download",
                       label: copy.gallery.download,
                       onSelect: () =>
-                        downloadImage(entry.url, `muapi-${entry.id || idx}.jpg`),
+                        noraDownloadOriginal(entry),
                     },
                     {
                       kind: "delete",
@@ -1548,6 +1560,7 @@ export default function ImageStudio({
                   ]}
                 />
 
+                <NoraGalleryActions entry={entry} />
                 {/* Prompt & Details */}
                 <div className="p-3 bg-black/80 backdrop-blur-sm border-t border-white/5 flex-1 flex flex-col justify-between gap-2">
                   <p className="text-white/70 text-xs line-clamp-3 leading-relaxed" title={entry.prompt}>

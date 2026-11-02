@@ -6,6 +6,8 @@ preserved separately in the original README below the fork notice.
 ## [Unreleased]
 
 ### Added
+- Open a prior gallery/queue job with **Пересоздать** to edit its full prompt, model, seed, settings and original reference roles before submitting; no automatic generation.
+- Paste clipboard images into the photo/video composer with Ctrl/⌘V, using the supported reference roles and existing upload limits.
 - Browse reference sets by hairstyle/body/look, open their individual originals and download an ordered no-crop 4×2 sheet or original ZIP; historical sets remain accessible through the archive filter.
 - Replace or remove user-uploaded photo/video references while preserving set positions and private originals.
 - Replace studio attachments in place without losing the current file on upload failure.
@@ -15,6 +17,8 @@ preserved separately in the original README below the fork notice.
 - Open the queue from a compact hamburger button as a desktop/mobile sidebar.
 
 ### Fixed
+- Allow prompt-only photo/video requests when the selected endpoint permits them; count committed H3 image references rather than requiring a first frame.
+- Download gallery originals through authenticated server attachments with the original filename and MIME type, avoiding temporary blob links and PNG-to-JPG mislabeling.
 - Reconcile lost Qwen submission/status responses using the existing request ID without duplicate generation.
 - Show bounded, redacted cloud provider error details instead of only generic HTTP failures.
 - Align the hamburger button with the sidebar on the right edge.

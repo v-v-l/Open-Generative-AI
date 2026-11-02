@@ -132,6 +132,49 @@ class PublicAuthTest(unittest.TestCase):
                 self.assertEqual(response.read(),b'<h1>Isolated selected frontend</h1>')
         self.assert_denied('/../../queue.sqlite3',404,cookie=cookie)
 
+    def test_original_download_keeps_mime_filename_range_and_auth(self):
+        ident = 'a'*32
+        path = Path(self.temp.name)/'original.png'
+        data = b'\x89PNG\r\n\x1a\noriginal bytes'
+        path.write_bytes(data)
+        with self.studio.lock:
+            self.studio.db.execute('INSERT INTO assets VALUES(?,?,?,?)', (ident,'Алиса оригинал.png','image/png',str(path)))
+            self.studio.db.commit()
+        route = '/media/'+ident
+        self.assert_denied(route+'?download=1',401)
+        cookie = self.login().split(';')[0]
+        with self.request(route,cookie=cookie) as response:
+            self.assertEqual(response.headers['Content-Type'],'image/png')
+            self.assertIsNone(response.headers.get('Content-Disposition'))
+            self.assertEqual(response.read(),data)
+        with self.request(route+'?download=1',cookie=cookie) as response:
+            self.assertEqual(response.headers['Content-Type'],'image/png')
+            self.assertIn('attachment;',response.headers['Content-Disposition'])
+            self.assertIn("filename*=UTF-8''%D0%90",response.headers['Content-Disposition'])
+            self.assertTrue(response.headers['Content-Disposition'].endswith('.png'))
+            self.assertEqual(response.read(),data)
+        with self.request(route+'?download=1',cookie=cookie,extra={'Range':'bytes=0-7'}) as response:
+            self.assertEqual(response.status,206)
+            self.assertEqual(response.headers['Content-Type'],'image/png')
+            self.assertEqual(response.read(),data[:8])
+        self.assert_denied('/media/'+'b'*32+'?download=1',404,cookie=cookie)
+
+    def test_job_history_preserves_missing_reference_positions_without_paths(self):
+        existing, removed, unknown = 'a'*32, 'b'*32, 'c'*32
+        path = Path(self.temp.name)/'reference.png';path.write_bytes(b'original')
+        with self.studio.lock:
+            for ident, source in ((existing,path),(removed,path.with_name('missing.png'))):
+                self.studio.db.execute('INSERT INTO assets VALUES(?,?,?,?)',(ident,'reference.png','image/png',str(source)))
+            self.studio.db.commit()
+            refs = [{'id':existing,'role':'image'},{'id':unknown,'role':'video','include_audio':True},{'id':removed,'role':'end'}]
+            row = {'payload':json.dumps({'assets':refs}),'id':'d'*32,'status':'completed','created_at':'now','updated_at':'now','error':None,'progress':None,'result':None,'cancel_requested':0}
+            job = self.studio.job(row)
+        self.assertEqual([asset['id'] for asset in job['assets']],[existing,unknown,removed])
+        self.assertEqual(job['assets'][0]['url'],'/media/'+existing)
+        self.assertEqual(job['assets'][1],{'id':unknown,'role':'video','missing':True,'include_audio':True})
+        self.assertTrue(job['assets'][2]['missing'])
+        self.assertTrue(all('path' not in asset for asset in job['assets']))
+
 
     def test_public_link_navigation_reaches_login_but_cross_site_fetch_cannot(self):
         navigation={'Sec-Fetch-Site':'cross-site','Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document'}

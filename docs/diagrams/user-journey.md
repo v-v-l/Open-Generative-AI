@@ -11,10 +11,17 @@ flowchart TD
   Library --> Sets[Browse active head/body/look sets; optional archive filter]
   Sets --> Detail[Open a set and its ordered angle originals]
   Detail --> Downloads[Download individual originals, no-crop 4x2 PNG or original ZIP]
+  Studio --> Gallery[Browse generated outputs]
+  Gallery --> Recreate[Open original job prompt, model, settings and files for editing]
+  Sidebar --> Recreate
+  Recreate --> Inputs
+  Gallery --> Original[Download original with server filename and MIME type]
   Library --> LoRA[Create LoRA set; upload selected photos/videos]
   LoRA --> Export[Preview or download originals/ZIP; no training]
   Studio --> Model[Choose configured model]
   Model --> Inputs[Attach supported references and enter prompt]
+  Inputs --> Clipboard[Optional clipboard image upload; role/count guards]
+  Clipboard --> Settings
   Inputs --> Settings[Set supported controls; random seed by default]
   Settings --> Quote[Review estimate or unknown cost and published rates]
   Quote --> Enqueue[Add to persistent queue]
