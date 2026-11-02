@@ -1,11 +1,11 @@
 "use strict";
 const $ = (selector) => document.querySelector(selector);
 const categoryNames = {
-  face: "Лицо / причёска",
-  body: "Фигура / поза",
-  outfit: "Одежда",
+  all: "Все наборы",
+  face: "Голова / причёска",
+  body: "Фигура / причёска",
+  outfit: "Образы / одежда",
   scene: "Локация",
-  head360: "Голова 360°",
   lora: "LoRA · фото / видео",
 };
 const statusNames = {
@@ -17,17 +17,17 @@ const statusNames = {
 const limit = 16;
 let catalog = { records: [], missing: {}, collections: [] },
   selected = [],
-  tab = "face",
+  tab = "all",
   busy = false,
   exportURL = null;
-let creating = false, uploading = false, uploadTarget = null, uploadFile = null, uploadPreviewURL = null, savedCollection = "";
+let creating = false, uploading = false, uploadTarget = null, uploadFile = null, uploadPreviewURL = null;
 let uploadFiles = [], uploadResults = [], removing = false, removeTarget = null;
 const isVideo = (item) => item?.media_kind === "video";
 const memberIds = (collection) => collection.category === "lora" ? (collection.items || []) : (collection.slots || []).map((slot) => slot.reference_id);
 const slotLabels = {
   face: ["0° · спереди", "45° · передние ¾", "90° · профиль", "135° · задние ¾", "180° · сзади", "225° · задние ¾", "270° · профиль", "315° · передние ¾"],
   body: ["0° · спереди", "45° · передние ¾", "90° · сбоку", "135° · задние ¾", "180° · сзади", "225° · задние ¾", "270° · сбоку", "315° · передние ¾"],
-  outfit: ["Спереди", "Сзади", "Сбоку", "Деталь"],
+  outfit: ["0° · спереди", "45° · передние ¾", "90° · сбоку", "135° · задние ¾", "180° · сзади", "225° · задние ¾", "270° · сбоку", "315° · передние ¾"],
   scene: ["Спереди · 0°", "Справа · 90°", "Сзади · 180°", "Слева · 270°"],
 };
 function node(tag, text, className) {
@@ -44,13 +44,71 @@ function button(text, action, label) {
   return value;
 }
 function message(text, error = false) {
+  $("#library-status").textContent = text;
   $("#status").textContent = text;
   $("#status").classList.toggle("error", error);
 }
-function inTab(item) {
-  return tab === "head360"
-    ? item.collection === "head360"
-    : item.category === tab && item.collection !== "head360";
+function setCategory(collection) { return collection.id === "head360" || collection.category === "head360" ? "face" : collection.category; }
+function setRecords(collection) { return [...new Set(memberIds(collection))].map(record).filter(Boolean); }
+function visibleSets() {
+  const query = $("#search").value.trim().toLocaleLowerCase("ru");
+  return (catalog.collections || []).filter((collection) =>
+    (!collection.archived || $("#archived").checked) &&
+    (tab === "all" || setCategory(collection) === tab) &&
+    (!query || [collection.title, collection.description, ...setRecords(collection).flatMap((item) => [item.title, item.id, ...(item.tags || [])])].join(" ").toLocaleLowerCase("ru").includes(query))).sort((a, b) => Number(Boolean(b.curated)) - Number(Boolean(a.curated)));
+}
+function hashCollection() {
+  try { return new URLSearchParams(location.hash.slice(1)).get("set") || ""; } catch { return ""; }
+}
+function navigateSet(id) {
+  const next = id ? "#set=" + encodeURIComponent(id) : "#";
+  if (location.hash === next || (!id && !location.hash)) applyLocation();
+  else location.hash = next;
+}
+function applyLocation() {
+  const id = hashCollection();
+  $("#collection").value = collectionInfo(id) ? id : "";
+  $("#search").value = "";
+  render();
+  if (collectionInfo()) $("#set-title").focus();
+  else $('#tabs button[aria-pressed="true"]')?.focus();
+}
+function renderSets() {
+  const current = collectionInfo();
+  $("#set-detail").hidden = !current;
+  $("#detail-controls").hidden = !current;
+  $("#cards").hidden = !current;
+  $("#set-cards").hidden = Boolean(current);
+  $("#collection-note").hidden = !current;
+  $("#set-cards").replaceChildren();
+  if (current) {
+    const items = setRecords(current), photos = items.filter((item) => !isVideo(item));
+    $("#set-title").textContent = current.title;
+    $("#set-description").textContent = [categoryNames[setCategory(current)], current.archived ? "Архив" : "", current.description].filter(Boolean).join(" · ");
+    $("#export-set-sheet").textContent = photos.length === 8 ? "Скачать лист · 4 × 2" : "Скачать лист · 4 колонки · " + photos.length + " фото";
+    $("#export-set-sheet").disabled = busy || !photos.length || photos.length > limit;
+    $("#export-set-zip").disabled = busy || !items.length || items.length > limit;
+    $("#set-export-note").textContent = "Только этот набор. " + photos.length + " фото" + (items.length > photos.length ? " и " + (items.length - photos.length) + " видео (только ZIP)" : "") + ". Пустые места не добавляются в PNG. Статусы оригиналов сохраняются." + (items.length > limit ? " Для экспорта выберите до 16 оригиналов в конструкторе." : "");
+    return;
+  }
+  for (const collection of visibleSets()) {
+    const items = setRecords(collection), cover = items.find((item) => !isVideo(item)), total = collection.category === "lora" ? items.length : (collection.slots || []).length;
+    const card = node("article", undefined, "card set-card");
+    const link = node("a", undefined, "set-link");
+    link.href = "#set=" + encodeURIComponent(collection.id);
+    const picture = node("div", undefined, "set-cover");
+    if (cover) { const img = node("img"); img.src = mediaURL(cover, "thumb"); img.alt = ""; img.loading = "lazy"; picture.append(img); }
+    else picture.append(node("span", collection.category === "lora" ? "Фото / видео" : "Пустой набор"));
+    const body = node("div", undefined, "body");
+    body.append(node("div", categoryNames[setCategory(collection)] || collection.category, "eyebrow"), node("h3", collection.title), node("p", collection.category === "lora" ? items.length + " оригиналов" : "Заполнено " + items.length + " / " + total + " ракурсов", "set-count"));
+    if (collection.description) body.append(node("p", collection.description, "hint"));
+    if (collection.curated) body.append(node("span", "Основной набор", "badge working"));
+    if (collection.archived) body.append(node("span", "Архив", "badge working"));
+    const candidates = items.filter((item) => item.status === "candidate").length;
+    if (candidates) body.append(node("span", "Кандидаты · " + candidates, "badge candidate"));
+    body.append(node("span", "Открыть набор →", "set-open"));
+    link.append(picture, body); card.append(link); $("#set-cards").append(card);
+  }
 }
 function angle(item) {
   const value = item.angle_degrees ?? item.angle;
@@ -95,20 +153,8 @@ function mediaURL(item, type) {
 function visibleRecords() {
   const query = $("#search").value.trim().toLocaleLowerCase("ru");
   const current = collectionInfo();
-  const members = current ? new Set(memberIds(current)) : null;
-  return catalog.records.filter(
-    (item) =>
-      inTab(item) &&
-      (!$("#collection").value || (members ? members.has(item.id) : item.collection === $("#collection").value)) &&
-      (tab === "head360" ||
-        $("#candidates").checked ||
-        item.status !== "candidate") &&
-      (!query ||
-        [item.id, item.title, ...(item.tags || [])]
-          .join(" ")
-          .toLocaleLowerCase("ru")
-          .includes(query)),
-  );
+  if (!current) return [];
+  return setRecords(current).filter((item) => !query || [item.id, item.title, ...(item.tags || [])].join(" ").toLocaleLowerCase("ru").includes(query));
 }
 function resetExport() {
   if (exportURL) URL.revokeObjectURL(exportURL);
@@ -168,23 +214,14 @@ function showPreview(item) {
 function renderTabs() {
   $("#tabs").replaceChildren();
   for (const [key, label] of Object.entries(categoryNames)) {
-    const count = catalog.records.filter((item) =>
-      key === "head360"
-        ? item.collection === "head360"
-        : item.category === key && item.collection !== "head360",
-    ).length;
-    const value = button(label + " · " + count, () => {
-      tab = key;
-      $("#search").value = "";
-      $("#collection").value = "";
-      savedCollection = "";
-      render();
-    });
+    const count = (catalog.collections || []).filter((item) => (!item.archived || $("#archived").checked) && (key === "all" || setCategory(item) === key)).length;
+    const value = button(label + " · " + count, () => { tab = key; $("#search").value = ""; navigateSet(""); render(); });
     value.setAttribute("aria-pressed", String(tab === key));
     $("#tabs").append(value);
   }
 }
 function renderCards() {
+  renderSets();
   const items = visibleRecords();
   const current = collectionInfo();
   const query = $("#search").value.trim().toLocaleLowerCase("ru");
@@ -198,16 +235,10 @@ function renderCards() {
     entries = (current.slots || []).flatMap((slot) => slot.reference_id
       ? (shown.has(slot.reference_id) ? [{...record(slot.reference_id), librarySlot: slot, libraryCollection: current}] : [])
       : (matchesSlot(current, slot) ? [{emptySlot: slot, libraryCollection: current}] : []));
-  } else {
-    for (const collection of catalog.collections || []) {
-      if (collection.category !== tab || collectionReadOnly(collection)) continue;
-      for (const slot of collection.slots || []) {
-        if (!slot.reference_id && matchesSlot(collection, slot)) entries.push({emptySlot: slot, libraryCollection: collection});
-      }
-    }
   }
   $("#cards").replaceChildren();
-  $("#empty").hidden = entries.length > 0;
+  $("#empty").hidden = current ? entries.length > 0 : visibleSets().length > 0;
+  $("#empty").textContent = current ? "В наборе пока нет оригиналов по этому запросу." : "Наборы не найдены. Измените фильтры или создайте новый набор.";
   for (const control of document.querySelectorAll("[data-create-category]")) control.disabled = busy || creating || uploading || Boolean(catalog.read_only);
   for (const item of entries) {
     if (item.emptySlot) {
@@ -298,7 +329,7 @@ function renderCollectionNote() {
   const append = $("#append-lora");
   append.hidden = !(info?.category === "lora" && !collectionReadOnly(info));
   append.disabled = busy || uploading;
-  if (tab === "lora") {
+  if (info?.category === "lora") {
     $("#collection-note").textContent = items.length + " оригиналов. Для добавления выберите или создайте набор LoRA. Фото и видео сохраняются для будущего датасета; обучение не запускается. Видео доступны для просмотра и ZIP, но не входят в PNG.";
     $("#select-collection").disabled = busy || !items.length;
     return;
@@ -330,34 +361,10 @@ function renderCollectionNote() {
 function render() {
   renderTabs();
   renderCards();
-  const notes = {
-    lora: "Отобранные фотографии и видео для улучшения будущего датасета. Наборы пополняются свободно, без обязательных ракурсов.",
-    face: "Портреты и причёски. «Отобран» и «Кандидат» показаны отдельно; выбор не меняет статус.",
-    body: "Отдельные фотографии фигуры и поз. В лист попадут оригиналы целиком.",
-    head360:
-      "Отдельные ракурсы головы с видимой шеей. Углы номинальные; сходство и симметрия требуют проверки.",
-    outfit:
-      "Референсы одежды. Невидимые детали в исходной фотографии требуют проверки.",
-    scene:
-      "Референсы локации. Восстановленные участки не являются подтверждённой геометрией.",
-  };
-  $("#section-note").textContent = notes[tab];
+  $("#section-note").textContent = collectionInfo() ? "Выберите отдельные оригиналы или скачайте весь набор. Выбор не меняет статус кандидата." : "Наборы фигуры с причёсками, головы и образов. Откройте набор, чтобы увидеть ракурсы.";
   $("#missing").replaceChildren();
-  const missing = catalog.missing?.[tab] || [];
-  $("#missing").hidden = !missing.length;
-  if (missing.length) {
-    $("#missing").append(
-      node("h3", "Недостающие или требующие проверки ракурсы"),
-    );
-    const list = node("ul");
-    missing.forEach((text) => list.append(node("li", text)));
-    $("#missing").append(list);
-  }
+  $("#missing").hidden = true;
   renderSelection();
-  try {
-    savedCollection = $("#collection").value;
-    localStorage.setItem("alice-reference-library-view-v1", JSON.stringify({tab, collection: savedCollection}));
-  } catch {}
 }
 function move(id, offset) {
   const index = selected.indexOf(id),
@@ -406,7 +413,8 @@ function settingsError(value) {
 function renderSelection() {
   $("#selection").replaceChildren();
   $("#selection-count").textContent = selected.length + " / " + limit;
-  $("#selection-link").textContent = "К листу · " + selected.length;
+  $("#builder-count").textContent = "· " + selected.length;
+  $("#selection-link").textContent = "Конструктор листа · " + selected.length;
   $("#selection-empty").hidden = selected.length > 0;
   selected.forEach((id, index) => {
     const item = record(id);
@@ -695,6 +703,7 @@ async function response(path, payload) {
 }
 async function load(options = {}) {
   $("#refresh-library").disabled = true;
+  $("#library-status").textContent = "Загружаю наборы…";
   try {
     const result = await (await response("catalog")).json();
     if (!Array.isArray(result.records))
@@ -708,7 +717,7 @@ async function load(options = {}) {
       saveSelection();
       message("Недоступные фотографии исключены из выбора.");
     }
-    const current = typeof options.collectionId === "string" ? options.collectionId : $("#collection").value || savedCollection;
+    const current = typeof options.collectionId === "string" ? options.collectionId : $("#collection").value || hashCollection();
     $("#collection").replaceChildren(new Option("Текущий раздел", ""));
     const metadata = new Map((catalog.collections || []).map((item) => [item.id, item]));
     const covered = new Set((catalog.collections || []).flatMap((item) => memberIds(item)).filter(Boolean));
@@ -726,24 +735,23 @@ async function load(options = {}) {
     )
       $("#collection").value = current;
     $("#summary").replaceChildren();
+    const activeSets = (catalog.collections || []).filter((item) => !item.archived);
+    const activeIds = new Set(activeSets.flatMap(memberIds).filter(Boolean));
     for (const [count, label] of [
-      [catalog.records.length, "оригиналов"],
-      [
-        catalog.records.filter((item) => item.status === "accepted").length,
-        "отобрано",
-      ],
-      [
-        catalog.records.filter((item) => item.collection === "head360").length,
-        "ракурсов головы",
-      ],
+      [activeSets.length, "активных наборов"],
+      [activeIds.size, "оригиналов в наборах"],
+      [(catalog.collections || []).filter((item) => item.archived).length, "наборов в архиве"],
     ]) {
       const value = node("span");
       value.append(node("b", String(count)), document.createTextNode(label));
       $("#summary").append(value);
     }
+    if (typeof options.collectionId === "string" && hashCollection() !== options.collectionId) history.pushState(null, "", "#set=" + encodeURIComponent(options.collectionId));
+    $("#library-status").textContent = hashCollection() && !collectionInfo(hashCollection()) ? "Набор недоступен. Выберите другой набор или обновите библиотеку." : "";
     render();
     return true;
   } catch (error) {
+    $("#library-status").textContent = "Не удалось загрузить наборы: " + error.message + ". Нажмите «Обновить».";
     message("Не удалось загрузить библиотеку: " + error.message, true);
     return false;
   } finally {
@@ -764,7 +772,10 @@ $("#create-collection-form").onsubmit = async (event) => {
   $("#close-create").disabled = true;
   formMessage("#create-message", "Создаю пустые места для ракурсов…");
   try {
-    const data = await (await response("collections", {title: $("#create-name").value.trim(), category: $("#create-category").value})).json();
+    const category = $("#create-category").value;
+    const payload = {title: $("#create-name").value.trim(), category};
+    if (category === "outfit") payload.slots = slotLabels.outfit.map((title, index) => ({id: "a" + String(index * 45).padStart(3, "0"), title, angle_degrees: index * 45}));
+    const data = await (await response("collections", payload)).json();
     const collection = data.collection || data;
     if (!collection.id) throw Error("Набор создан, но сервер не вернул его ID. Обновите библиотеку.");
     tab = collection.category;
@@ -838,14 +849,34 @@ $("#upload-reference-form").onsubmit = async (event) => {
   }
 };
 $("#search").oninput = renderCards;
-$("#candidates").onchange = renderCards;
-$("#collection").onchange = () => {
+$("#archived").onchange = render;
+$("#collection").onchange = () => navigateSet($("#collection").value);
+$("#back-to-sets").onclick = (event) => { event.preventDefault(); tab = "all"; navigateSet(""); };
+$("#selection-link").onclick = () => { $("#sheet-builder").open = true; $("#sheet-controls").focus(); $("#sheet-controls").scrollIntoView({block: "start"}); };
+window.addEventListener("hashchange", applyLocation);
+window.addEventListener("popstate", applyLocation);
+async function exportSet(format) {
   const collection = collectionInfo();
-  if (collection) tab = collection.id === "head360" || (collection.slots || []).some((slot) => record(slot.reference_id)?.collection === "head360") ? "head360" : collection.category;
-  else if ($("#collection").value === "head360") tab = "head360";
-  $("#search").value = "";
-  render();
-};
+  if (!collection || busy) return;
+  const items = setRecords(collection).filter((item) => format === "zip" || !isVideo(item));
+  if (!items.length || items.length > limit) return;
+  busy = true; renderCards(); renderSelection();
+  const status = $("#library-status"); status.textContent = "Готовлю файл набора…";
+  try {
+    const payload = {ids: items.map((item) => item.id)};
+    if (format !== "zip") Object.assign(payload, {columns: 4, cell_width: 512, cell_height: 768, labels: false});
+    const result = await response(format === "zip" ? "zip" : "export", payload);
+    if (!result.headers.get("content-type")?.includes(format === "zip" ? "application/zip" : "image/png")) throw Error("Сервер вернул неверный формат файла");
+    const url = URL.createObjectURL(await result.blob()), link = node("a");
+    link.href = url; link.download = collection.id + (format === "zip" ? "-originals.zip" : "-4-columns.png");
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    status.textContent = "Файл набора готов и передан браузеру для скачивания.";
+  } catch (error) { status.textContent = "Не удалось скачать набор: " + error.message + ". Повторите попытку."; }
+  finally { busy = false; renderCards(); renderSelection(); }
+}
+$("#export-set-sheet").onclick = () => exportSet("png");
+$("#export-set-zip").onclick = () => exportSet("zip");
 $("#select-collection").onclick = () => {
   const items = collectionRecords();
   if (items.length > limit) {
@@ -930,9 +961,7 @@ $("#preview").onclick = (event) => {
   if (event.target === $("#preview")) $("#preview").close();
 };
 try {
-  const view = JSON.parse(localStorage.getItem("alice-reference-library-view-v1") || "{}");
-  if (categoryNames[view.tab]) tab = view.tab;
-  if (typeof view.collection === "string") savedCollection = view.collection;
+  // Each fresh visit starts with all sets; the URL owns set navigation.
   const saved = JSON.parse(
     localStorage.getItem("alice-reference-library-selection-v1") || "[]",
   );

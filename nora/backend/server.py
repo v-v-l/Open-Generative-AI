@@ -627,6 +627,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200,{'authenticated':False},cookie=auth.cookie('',clear=True) if auth and auth.required else None)
             if route == '/references/api/collections':
                 return self.send(201, self.references().create_collection(payload))
+            if route == '/references/api/collections/update':
+                return self.send(200, self.references().update_collection(payload))
             if route == '/references/api/uploads':
                 return self.send(201, self.references().upload_reference(payload))
             if route == '/references/api/remove':

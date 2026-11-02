@@ -89,6 +89,21 @@ class ReferenceRoutes(unittest.TestCase):
         self.denied('/references/api/export',400,payload={'ids':['H000','H000']},cookie=cookie)
         self.denied('/references/api/export',400,payload={'ids':['H000'],'cell_width':99999},cookie=cookie)
 
+    def test_set_metadata_update_auth_origin_readonly_and_no_generation(self):
+        payload={'id':'legacy-face','title':'Earlier portraits','archived':True}
+        self.denied('/references/api/collections/update',401,payload=payload)
+        cookie=self.login()
+        self.denied('/references/api/collections/update',403,payload=payload,cookie=cookie,origin='https://evil.example')
+        with self.request('/references/api/collections/update',payload,cookie) as response:
+            updated=json.load(response)['collection']
+        self.assertTrue(updated['archived'])
+        self.assertEqual(updated['title'],'Earlier portraits')
+        with self.request('/references/file/H000',cookie=cookie) as response:
+            self.assertEqual(response.read(),(Path(self.tmp.name)/'red.png').read_bytes())
+        self.http.read_only=True
+        self.denied('/references/api/collections/update',403,payload={**payload,'archived':False},cookie=cookie)
+        self.assertEqual(self.studio.db.execute('select count(*) from jobs').fetchone()[0],0)
+
     def test_lora_upload_video_inline_ranges_download_and_readonly(self):
         if not shutil.which('ffmpeg') or not shutil.which('ffprobe'):self.skipTest('media tools unavailable')
         target=Path(self.tmp.name)/'tiny.mp4'

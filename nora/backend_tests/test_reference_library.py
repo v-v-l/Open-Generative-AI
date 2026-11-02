@@ -64,6 +64,35 @@ class ReferenceLibraryTest(unittest.TestCase):
             self.assertEqual(archive.namelist(),['H045.png','H000.png'])
             self.assertEqual(archive.read('H000.png'),self.library.original('H000')['bytes'])
 
+    def test_archive_and_rename_legacy_set_preserves_originals_and_membership(self):
+        original=self.library.original('H000')['bytes']
+        result=self.library.update_collection({'id':'legacy-head360','title':'Earlier head set','description':'Historical profiles','archived':True,'curated':False})['collection']
+        self.assertTrue(result['archived'])
+        self.assertTrue(result['read_only'])
+        self.assertEqual([slot['reference_id'] for slot in result['slots']],['H000','H045'])
+        reloaded=refs.Library(self.root)
+        self.assertEqual(reloaded.catalog()['collections'][0]['title'],'Earlier head set')
+        self.assertEqual(reloaded.original('H000')['bytes'],original)
+        self.assertEqual(len(reloaded.catalog()['records']),2)
+        restored=reloaded.update_collection({'id':'legacy-head360','archived':False})['collection']
+        self.assertFalse(restored['archived'])
+        self.assertEqual(restored['description'],'Historical profiles')
+
+    def test_collection_metadata_changes_preserve_slots_and_reject_unsafe_fields(self):
+        collection=self.library.create_collection({'title':'My head','category':'face'})['collection']
+        updated=self.library.update_collection({'id':collection['id'],'title':'Chosen head','curated':True})['collection']
+        self.assertEqual(updated['slots'],collection['slots'])
+        self.assertTrue(updated['curated'])
+        self.assertFalse(updated['archived'])
+        for payload in ({'id':collection['id'],'category':'body'}, {'id':collection['id'],'slots':[]},
+                        {'id':collection['id'],'archived':'true'}, {'id':collection['id'],'title':' '},
+                        {'id':collection['id'],'description':'/private/source.png'}, {'id':collection['id'],'curated':1},
+                        {'id':collection['id']}, {'id':'../escape','archived':True}):
+            with self.assertRaises(refs.LibraryError):self.library.update_collection(payload)
+        with self.assertRaises(refs.LibraryError) as error:self.library.update_collection({'id':'unknown-set','archived':True})
+        self.assertEqual(error.exception.status,404)
+        self.assertEqual(self.library.catalog()['collections'][0]['title'],'Chosen head')
+
     def test_sheet_keeps_full_framing_and_selected_order_with_no_labels_by_default(self):
         payload={'ids':['H045','H000'],'columns':2,'cell_width':80,'cell_height':80}
         result=self.library.export_sheet(payload)

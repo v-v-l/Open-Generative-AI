@@ -12,17 +12,17 @@
       <div class="eyebrow">БИБЛИОТЕКА ПЕРСОНАЖА</div>
       <h1>Алиса<span> / референсы</span></h1>
       <p>
-        Добавляйте свои фотографии по ракурсам и собирайте референсные листы
-        из выбранных оригиналов.
+        Выберите набор фигуры, головы или образа, скачайте оригиналы
+        или готовый лист из его фотографий.
       </p>
       <p class="purpose">
         Загрузка, выбор и экспорт · без запуска генерации. Оригиналы сохраняются.
       </p>
       <div id="summary" class="summary"></div>
       <div class="add-reference-actions" aria-label="Добавить набор референсов">
-        <button type="button" data-create-category="face">＋ Добавить референсы лица</button>
-        <button type="button" data-create-category="body">＋ Добавить референсы фигуры</button>
-        <button type="button" data-create-category="outfit">＋ Добавить одежду</button>
+        <button type="button" data-create-category="face">＋ Голова / причёска</button>
+        <button type="button" data-create-category="body">＋ Фигура / причёска</button>
+        <button type="button" data-create-category="outfit">＋ Образ / одежда</button>
         <button type="button" data-create-category="scene">＋ Добавить локацию</button>
         <button type="button" data-create-category="lora">＋ Добавить набор LoRA</button>
       </div>
@@ -33,22 +33,34 @@
         <div class="filters">
           <button id="refresh-library" type="button">Обновить ↻</button
           ><label class="search-label"
-            >Найти ракурс или причёску<input
+            >Найти набор или ракурс<input
               id="search"
               type="search"
               placeholder="Например: хвост, профиль, ¾" /></label
           ><label class="check"
-            ><input id="candidates" type="checkbox" />Показать кандидатов</label
+            ><input id="archived" type="checkbox" />Показать архив</label
           >
         </div>
+        <p id="library-status" role="status" aria-live="polite"></p>
         <p id="section-note" class="section-note"></p>
-        <div class="collection-controls">
-          <label
+        <div id="set-detail" hidden>
+          <a id="back-to-sets" href="#">← Все наборы</a>
+          <h2 id="set-title" tabindex="-1"></h2>
+          <p id="set-description" class="section-note"></p>
+          <div class="set-actions">
+            <button id="export-set-sheet" type="button">Скачать лист · 4 колонки</button>
+            <button id="export-set-zip" type="button">Скачать оригиналы · ZIP</button>
+          </div>
+          <p id="set-export-note" class="hint"></p>
+        </div>
+        <div id="set-cards" class="set-cards"></div>
+        <div class="collection-controls" id="detail-controls" hidden>
+          <label hidden
             >Набор<select id="collection">
               <option value="">Текущий раздел</option>
             </select></label
-          ><button id="select-collection" type="button">Выбрать набор</button>
-          <a id="selection-link" href="#sheet-controls">К листу · 0</a>
+          ><button id="select-collection" type="button">Выбрать все оригиналы</button>
+          <button id="selection-link" type="button">Конструктор листа · 0</button>
         </div>
         <button id="append-lora" type="button" hidden>＋ Загрузить фото / видео</button>
         <p id="collection-note" class="section-note"></p>
@@ -60,6 +72,7 @@
           aria-label="Недостающие ракурсы"
         ></section>
       </section>
+      <details id="sheet-builder" class="sheet-builder"><summary>Свой лист из выбранных оригиналов <span id="builder-count">0</span></summary>
       <aside id="sheet-controls" aria-label="Референсный лист" tabindex="-1">
         <div class="eyebrow">СОБРАТЬ ЛИСТ</div>
         <h2>Выбранные оригиналы <span id="selection-count">0 / 16</span></h2>
@@ -135,7 +148,7 @@
           Скачать выбранные оригиналы · ZIP
         </button>
         <p id="status" role="status" aria-live="polite"></p>
-      </aside>
+      </aside></details>
     </main>
     <dialog id="preview">
       <button id="close-preview" class="close" aria-label="Закрыть просмотр">
@@ -157,9 +170,9 @@
         <h2 id="create-title">Референсы по ракурсам</h2>
         <p id="create-hint" class="hint">Создадим пустые места для фотографий. Их можно заполнить сейчас или вернуться позже.</p>
         <label>Раздел<select id="create-category" name="category">
-          <option value="face">Лицо / причёска</option>
-          <option value="body">Фигура / поза</option>
-          <option value="outfit">Одежда</option>
+          <option value="face">Голова / причёска</option>
+          <option value="body">Фигура / причёска</option>
+          <option value="outfit">Образы / одежда</option>
           <option value="scene">Локация</option>
           <option value="lora">LoRA · фото и видео</option>
         </select></label>

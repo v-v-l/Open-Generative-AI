@@ -66,8 +66,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed():return self.json({'error':'Same-origin loopback access required'},403)
         route=urlsplit(self.path).path
-        if getattr(self.server,'read_only',False) and route in ('/references/api/collections','/references/api/uploads','/references/api/remove'):return self.json({'error':'Reference preview is read-only'},403)
-        if route not in ('/references/api/export','/references/api/zip','/references/api/collections','/references/api/uploads','/references/api/remove'):return self.json({'error':'No generation operations exist in this library'},404)
+        if getattr(self.server,'read_only',False) and route in ('/references/api/collections','/references/api/collections/update','/references/api/uploads','/references/api/remove'):return self.json({'error':'Reference preview is read-only'},403)
+        if route not in ('/references/api/export','/references/api/zip','/references/api/collections','/references/api/collections/update','/references/api/uploads','/references/api/remove'):return self.json({'error':'No generation operations exist in this library'},404)
         if not EXPORT_LOCK.acquire(blocking=False):return self.json({'error':'Another export is running'},429)
         try:
             length=int(self.headers.get('Content-Length','0'))
@@ -75,6 +75,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get('Content-Type','').split(';')[0]!='application/json' or not 0<length<=limit:return self.json({'error':'Bounded JSON request required'},400)
             payload=json.loads(self.rfile.read(length));library=self.server.library
             if route.endswith('/collections'):return self.json(library.create_collection(payload),201)
+            if route=='/references/api/collections/update':return self.json(library.update_collection(payload))
             if route.endswith('/uploads'):return self.json(library.upload_reference(payload),201)
             if route.endswith('/remove'):return self.json(library.remove_reference(payload))
             result=library.export_sheet(payload) if route.endswith('/export') else library.export_zip(payload)

@@ -177,7 +177,46 @@ class Library:
             if name=='head360' and re.fullmatch(r'H\d{3}',identifier):
                 slot['angle_degrees']=int(identifier[1:])
             group['slots'].append(slot)
-        return collections+list(grouped.values())
+        result=collections+list(grouped.values())
+        overrides=self.metadata.get('collection_overrides',{})
+        for collection in result:
+            source=next((item for item in self.metadata.get('collections',[]) if item['id']==collection['id']),{})
+            source={**source,**overrides.get(collection['id'],{})}
+            collection.update(archived=source.get('archived',False),curated=source.get('curated',False),
+                              description=_text(source.get('description','')))
+            if source.get('title'):collection['title']=_text(source['title'],120)
+        return result
+
+    def update_collection(self, payload):
+        """Rename or archive a set without changing its originals or membership."""
+        allowed={'id','title','description','archived','curated'}
+        if not isinstance(payload,dict) or set(payload)-allowed or len(payload)<2:
+            raise LibraryError('Provide a set ID and supported metadata changes')
+        identifier=payload.get('id')
+        if not isinstance(identifier,str) or not ID.fullmatch(identifier):
+            raise LibraryError('Invalid reference set ID')
+        changes={key:value for key,value in payload.items() if key!='id'}
+        for key in ('archived','curated'):
+            if key in changes and type(changes[key]) is not bool:
+                raise LibraryError(key+' must be true or false')
+        for key,maximum in (('title',120),('description',500)):
+            if key not in changes:continue
+            value=changes[key]
+            if not isinstance(value,str) or len(value)>maximum or (value and not _text(value,maximum)):
+                raise LibraryError('Invalid reference set '+key)
+            if key=='title' and not value.strip():raise LibraryError('A reference set needs a title')
+            changes[key]=value.strip()
+        with self._mutation():
+            if not any(item['id']==identifier for item in self._collections()):
+                raise LibraryError('Unknown reference set',404)
+            data=copy.deepcopy(self.metadata)
+            target=next((item for item in data.get('collections',[]) if item['id']==identifier),None)
+            if target is None:
+                target=data.setdefault('collection_overrides',{}).setdefault(identifier,{})
+            target.update(changes)
+            self._persist(data)
+            updated=next(item for item in self._collections() if item['id']==identifier)
+        return {'collection':updated}
 
     def create_collection(self, payload):
         if not isinstance(payload,dict) or set(payload)-{'title','category','slots'}:
@@ -429,6 +468,9 @@ class Library:
                         raise LibraryError('Reference manifest has an invalid collection ID',503)
                     if collection.get('category') not in CATEGORIES or not _text(collection.get('title')):
                         raise LibraryError('Reference manifest has invalid collection metadata',503)
+                    for key in ('archived','curated'):
+                        if key in collection and type(collection[key]) is not bool:
+                            raise LibraryError('Reference manifest has invalid collection metadata',503)
                     slots=collection.get('slots')
                     if not isinstance(slots,list):
                         raise LibraryError('Reference manifest has invalid slots',503)
@@ -445,6 +487,16 @@ class Library:
                         if slot.get('reference_id') is not None and (slot.get('reference_id') not in records or records[slot['reference_id']].get('archived')):
                             raise LibraryError('Reference slot points to an unknown original',503)
                     seen.add(collection['id'])
+                overrides=data.get('collection_overrides',{})
+                if not isinstance(overrides,dict) or len(overrides)>200:
+                    raise LibraryError('Reference manifest has invalid set metadata',503)
+                for identifier,override in overrides.items():
+                    if not isinstance(identifier,str) or not ID.fullmatch(identifier) or not isinstance(override,dict) or set(override)-{'title','description','archived','curated'}:
+                        raise LibraryError('Reference manifest has invalid set metadata',503)
+                    if any(key in override and type(override[key]) is not bool for key in ('archived','curated')):
+                        raise LibraryError('Reference manifest has invalid set metadata',503)
+                    if any(key in override and (not isinstance(override[key],str) or len(override[key])>maximum or (override[key] and not _text(override[key],maximum))) for key,maximum in (('title',120),('description',500))):
+                        raise LibraryError('Reference manifest has invalid set metadata',503)
                 self.records = {key:value for key,value in records.items() if not value.get('archived')}
                 self.metadata = data
                 self._stamp = stamp

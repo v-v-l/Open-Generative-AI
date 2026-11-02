@@ -7,6 +7,26 @@ ComfyUI upload, workflow preparation, queue, seed, model or provider actions.
 
 ## Using the library
 
+### Sets first
+
+The landing page shows named sets, not a flat mix of photographs. Open a set to
+view its individual angles, download originals, select photographs for a custom
+sheet, or download the whole set directly as PNG or original ZIP. Eight photos
+export in four columns and two rows; missing slots are never fabricated or
+duplicated. Photos fit completely inside their cells without cropping.
+
+Heads/hairstyles, bodies/hairstyles and complete looks remain separate categories.
+New looks use eight nominal angle slots; existing four-slot garment sets remain
+intact. The custom sheet builder is collapsed until requested. Set navigation uses
+shareable `#set=ID` links and supports browser back/forward on mobile and desktop.
+
+Archived sets are hidden by default and available through **Показать архив**.
+Archiving a set only changes presentation metadata: its membership and original
+downloads remain intact. This differs from removing an individual upload, which
+detaches it and blocks that archived original's public library routes.
+The `curated` set flag marks an explicitly selected working set; it does not alter
+individual candidate statuses, train a model or prove biometric consistency.
+
 ### LoRA selection
 
 The **LoRA · фото / видео** tab stores photographs and videos selected for a future
@@ -45,9 +65,10 @@ cross-process file lock and atomic replacement; uploads never enqueue inference.
 
 Choose individual cards or a named collection. The selected list defines export
 order left-to-right, then top-to-bottom. Reorder/remove items with its buttons.
-The head collection currently contains eight separate photos at nominal
-0/45/90/135/180/225/270/315 degrees. Body currently has only the existing three
-originals; missing directions are shown rather than generated or duplicated.
+Angle sets contain separately retained originals at nominal
+0/45/90/135/180/225/270/315 degrees. Incomplete sets show empty slots rather than
+generating or duplicating missing views. Other body hairstyles must not be
+presented as completed reference sets before they have been selected.
 
 Set column count and cell dimensions, inspect the preview, then download PNG.
 Labels default off. The full image is fitted inside each cell with white padding;
@@ -107,6 +128,7 @@ for this reference-only preview. The former workflow preparation server is retir
 - `GET /references/api/catalog`
 - `GET /references/image/ID`, `/thumb/ID`, `/file/ID`
 - `POST /references/api/collections`: `{title,category,slots?}`
+- `POST /references/api/collections/update`: `{id,title?,description?,archived?,curated?}` — changes set metadata only, including presentation overrides for read-only legacy groups
 - `POST /references/api/uploads`: `{collection_id,slot_id?,replace_id?,name,mime,data}`; occupied slots require the current `replace_id`, LoRA replacement uses `replace_id` without a slot
 - `POST /references/api/remove`: `{id}` — archive one user upload and detach it from its set
 - `POST /references/api/export`: `{ids,columns,cell_width,cell_height,labels}`
