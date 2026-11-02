@@ -304,3 +304,25 @@ release retained for rollback; no generation or dataset data migration required.
 Evidence outside Git: work/studio-usability-v1/{backend-tests.log,frontend-check.log,
 frontend-tests.log,frontend-build.log,live-verification.json,live-download.json,
 live-browser.log,live-mobile-viewport.png}. Test browser state was removed privately.
+
+## Promoted — 2026-11-02: requested OpenRouter video models and Avatar IV
+
+Release `nora-v4k-openrouter-avatars`, implementation source `48d7a14`.
+
+- [x] Verified live OpenRouter catalog/OpenAPI, official video skill and HeyGen upstream semantics. HeyGen Video and H3 Max were already discovered; refreshed those two and added Avatar IV with an explicit script adapter.
+- [x] Avatar exposes one required image, spoken script and required Voice ID; typed optional motion/expressiveness/fit/remove-background options go under provider.options.heygen.parameters. No fixed duration, seed or audio toggle; uploaded audio and complex unimplemented options stay hidden. Complete Avatar-specific OpenRouter POST has not been paid-tested.
+- [x] H3 Max supports first/last frames,480p/768p,5–15s with no seed/audio toggle. HeyGen Video supports text/first frame,480p/768p/2K,5–15s and seed. Catalog rates are shown; no screenshot promotion is assumed.
+- [x] H3 Max and text-only HeyGen estimates use exact catalog rate×seconds. Avatar speech duration and HeyGen frame pricing totals remain unknown until usage; budget guards do not invent totals.
+- [x] Full backend107 tests:103 pass,4 disposable-PostgreSQL cases skipped. Frontend check/typecheck, seven test files, build and diff whitespace gate passed. Native Avatar fixture browser passed10 desktop/mobile checks with mocked transport; backend tests assert one POST and exact model-specific reference/options payloads.
+- [x] Preserved the complete prior cloud catalog at apps runtime/work/generation-studio/cloud-catalog.before-v4k.json, SHA256 b9e9a18a7e8df655ca8d59de3ae99323f1f701b8c2f1f67ea13260a28075b2ac. GET-only targeted refresh retained unrelated rows/pinned endpoints byte-for-byte; cloud models89→90, total91→92. No full image-catalog refresh.
+- [x] Safely promoted backend/frontend with paused/idle preflight and private candidate auth/Host/peer gate. Live API verified three models and estimates; public browser verified exact Avatar photo/script/Voice-ID payload through interception, supported fields, tariff note, mobile layout and no page errors.
+- [x] Restored original queue state after confirming zero pending/running jobs. History31→32 includes one concurrent, already cancelled H3 user job; it was preserved. Test submissions/uploads were intercepted; no paid test calls or real test uploads. Owned mock/browser sessions stopped and private browser-state file removed.
+
+No dependencies, SQL migrations, services or secrets added. Source and targeted
+catalog update belong together. To roll back to a version without the Avatar
+adapter, restore the preserved catalog snapshot as well; keep newer user jobs and
+media intact, with no automatic retries. Reference library data was unchanged.
+
+Evidence outside Git: work/openrouter-heygen-h3-v1/{video-models.json,openapi.txt,
+backend-tests.log,frontend-check.log,frontend-tests.log,frontend-build.log,
+live-catalog.json,live-verification.json,live-browser.log,live-mobile.png}.
