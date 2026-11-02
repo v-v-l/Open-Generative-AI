@@ -263,3 +263,25 @@ work/studio-replace-video-mobile.png and library mutations/delete-confirm screen
 No new dependencies, secrets, services or database migrations. Portable manifest
 records gain optional archive metadata on mutation; retain archive-aware backend
 versions on rollback so archived items do not reappear. User journey/manual updated.
+
+## Promoted — 2026-11-02: curated reference sets
+
+Backend release `nora-v4i-reference-sets`, implementation source `7818f67`.
+
+- [x] Saved a full private library backup before mutation; verified all61 previous originals remain byte-exact after curation.
+- [x] Safely activated backend with paused/idle preflight and passed private candidate authentication/Host/peer negative gate. Reference HTML/JS is backend-served; studio frontend/proxy unchanged.
+- [x] Reused three existing selected sets and imported the accepted white tennis/bun set: four active sets with32 selected originals, eight angles each. No new inference or image alteration.
+- [x] Archived the user-rejected old ponytail and historical working groups: six archived sets; original downloads remain available through the archive filter. No physical deletions.
+- [x] Verified all32 original download hashes and all four ordered2048x1536/no-crop PNG sheets and byte-exact8-original ZIP files through authenticated production APIs.
+- [x] Live desktop/mobile browser verified four active sets, archive access, eight-member details, navigation and actual sheet download without overflow. Fixture browser checks and35 Python reference tests passed.
+- [x] Restored the originally unpaused queue only after confirming no queued/running job; retained all26 job records. No paid verification calls.
+
+No new dependencies, services, secrets or SQL migrations. Collection manifest
+metadata gains optional archived/curated flags and legacy-group overrides. Rollback
+must retain archive-aware readers or restore the complete pre-curation manifest;
+never remove newly imported originals while rolling back source.
+
+Evidence outside Git: work/reference-housekeeping-v1/import-report.json,
+live-verification.json and desktop/mobile screenshots. A conservative local cleanup
+inventory was prepared; selected/archive sources and training/LoRA/FIBO folders
+are protected, and no local generation files were deleted.

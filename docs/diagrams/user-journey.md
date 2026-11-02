@@ -1,6 +1,6 @@
 # Nora generation journey
 
-Updated for the compact main menu, LoRA library, seed controls and queue sidebar, 2026-11-01.
+Verified against reference-set implementation `7818f67` and live production, 2026-11-02.
 See the deployment ledger for source revisions and live browser verification.
 
 ```mermaid
@@ -8,6 +8,9 @@ flowchart TD
   Login[Sign in] --> Studio[Choose Image or Video Studio]
   Studio --> Menu[Open hamburger menu and queue]
   Menu --> Library[Open reference library]
+  Library --> Sets[Browse active head/body/look sets; optional archive filter]
+  Sets --> Detail[Open a set and its ordered angle originals]
+  Detail --> Downloads[Download individual originals, no-crop 4x2 PNG or original ZIP]
   Library --> LoRA[Create LoRA set; upload selected photos/videos]
   LoRA --> Export[Preview or download originals/ZIP; no training]
   Studio --> Model[Choose configured model]
@@ -38,6 +41,11 @@ User library uploads can be replaced in place or removed after confirmation.
 Removal clears active set/export membership while retaining a private archive;
 legacy read-only references remain protected. Studio attachments can likewise be
 replaced in place before enqueueing. These actions never trigger inference.
+
+Archiving an entire set is presentation metadata: its originals remain downloadable
+when the archive filter is enabled. This differs from removing an individual upload,
+which excludes that record from public download/export access. Set exports use only
+that set's ordered members; the collapsed custom builder supports mixed selections.
 
 Qwen-only executor readiness updates with state polling. Offline Qwen disables
 submission/retry while cloud/H3 remain usable; queued offline Qwen work waits for

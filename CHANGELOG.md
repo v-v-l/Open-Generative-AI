@@ -6,6 +6,7 @@ preserved separately in the original README below the fork notice.
 ## [Unreleased]
 
 ### Added
+- Browse reference sets by hairstyle/body/look, open their individual originals and download an ordered no-crop 4×2 sheet or original ZIP; historical sets remain accessible through the archive filter.
 - Replace or remove user-uploaded photo/video references while preserving set positions and private originals.
 - Replace studio attachments in place without losing the current file on upload failure.
 - Curate named LoRA photo/video sets with batch uploads, playback, original downloads and mixed ZIP exports; no training is launched.
