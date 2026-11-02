@@ -285,3 +285,22 @@ Evidence outside Git: work/reference-housekeeping-v1/import-report.json,
 live-verification.json and desktop/mobile screenshots. A conservative local cleanup
 inventory was prepared; selected/archive sources and training/LoRA/FIBO folders
 are protected, and no local generation files were deleted.
+
+## Promoted — 2026-11-02: studio references, recreation and original downloads
+
+Release `nora-v4j-studio-usability`, implementation source `6dfc50a`.
+
+- [x] Fixed upstream form guards using actual endpoint role requirements: optional text-only photo/video requests stay valid, H3 Image-only inputs count, and text-capable video variants expose their supported input fields. Cloud last-frame-only rejection and H3 independent guide semantics remain consistent with the backend.
+- [x] Clipboard images upload through the composer attachment pipeline with role selection, format/count/size/read-only/upload guards; ordinary text paste is unchanged.
+- [x] Gallery and queue **Пересоздать** restore literal prompt, model, saved seed/settings and original references for editing without enqueueing. Missing originals, changed role support and concurrent uploads fail before draft mutation. Reference existence checks use bounded ranged GETs; per-video include_audio:false is preserved.
+- [x] Gallery downloads now use authenticated original URLs with download=1; backend supplies original MIME and RFC5987 attachment filename, retaining inline playback and byte ranges without exposing storage paths. Missing job references remain represented rather than silently disappearing.
+- [x] Full backend101 tests:97 passed,4 disposable-PostgreSQL cases skipped. Frontend check/typecheck, six test files, build and diff whitespace checks passed. Native-studio fixture browser checks cover13 flows including Qwen/OpenAI text-only, H3 clipboard image, Veo Start, exact recreation payloads and PNG bytes at desktop/mobile sizes.
+- [x] Paused/drained queue, safely activated backend and frontend, passed private candidate auth/Host/peer gate, and restored original queue state after live verification. All26 jobs retained; library data unchanged.
+- [x] Public browser verified original prompt/files restored without submission, real PNG download/name, captured Qwen text-only and H3 clipboard submissions, mobile layout and zero page errors. Test generation/upload requests were intercepted; no real uploads or paid calls.
+
+No new dependencies, secrets, services or SQL migrations. Backend and frontend must
+be promoted together for the server download filename contract. Previous immutable
+release retained for rollback; no generation or dataset data migration required.
+Evidence outside Git: work/studio-usability-v1/{backend-tests.log,frontend-check.log,
+frontend-tests.log,frontend-build.log,live-verification.json,live-download.json,
+live-browser.log,live-mobile-viewport.png}. Test browser state was removed privately.

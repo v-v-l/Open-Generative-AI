@@ -1,6 +1,6 @@
 # Nora generation journey
 
-Verified against reference-set implementation `7818f67` and live production, 2026-11-02.
+Verified against studio usability implementation `6dfc50a` and live production, 2026-11-02.
 See the deployment ledger for source revisions and live browser verification.
 
 ```mermaid
