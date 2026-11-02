@@ -271,3 +271,23 @@ connected in this adapter; only the documented photo-and-script mode is exposed.
 The output duration follows speech, so the catalog rate is visible but the total
 price remains unknown until generation returns usage. No automatic paid test is
 used to enable a model.
+
+### Output presets
+
+Use the **Формат / Разрешение / Длительность** row above the main controls to
+choose the output without entering pixel dimensions. Cloud choices use the exact
+formats, resolution tiers and durations published for the selected model; a tier
+such as 2K appears only when that endpoint advertises it. OpenAI's fixed image
+sizes map to their actual formats, while generation quality stays a separate choice.
+
+Local Qwen/H3 presets convert format and approximate long-edge tiers into valid
+dimensions divisible by32, with the actual pixel size displayed. Local output is
+capped at1536 pixels per dimension; no unsupported2K tier is offered. H3 duration
+choices map to its valid frame counts and show their actual approximate seconds.
+Avatar IV duration remains determined by speech.
+
+Dependent choices are kept compatible: selecting Veo4K also selects8seconds and
+shows the adjustment. Recreated/custom native dimensions and frame counts are
+retained as custom values until a preset is explicitly selected; choosing a standard
+format enables its resolution tiers. Advanced manual native controls remain in
+Parameters. Changing an output choice updates the cost estimate without generating.

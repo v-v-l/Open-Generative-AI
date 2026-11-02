@@ -57,6 +57,7 @@ export function modelFromDescriptor(m, mode) {
         "resolution",
         "quality",
         "duration",
+        "size",
       ].includes(key),
     };
   }

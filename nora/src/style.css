@@ -1054,3 +1054,10 @@ body {
 .nora-gallery-actions button:focus-visible { outline: 2px solid #22d3ee; outline-offset: 2px; }
 .nora-gallery-actions button:disabled { opacity: .5; }
 .nora-gallery-actions .nora-warning { width: 100%; }
+
+.nora-output-presets { display: flex; align-items: end; flex-wrap: wrap; gap: .6rem; margin: .35rem 0; min-width: 0; }
+.nora-output-choice { display: flex; flex-direction: column; gap: .2rem; min-width: 100px; max-width: 100%; font-size: .72rem; color: #cbd5e1; }
+.nora-output-choice select { min-height: 40px; max-width: 100%; color: #f1f5f9; background: #17202e; border: 1px solid #475569; border-radius: .5rem; padding: .4rem .55rem; font-size: .8rem; }
+.nora-output-choice select:focus-visible { outline: 2px solid #22d3ee; outline-offset: 2px; }
+.nora-output-note { color: #cbd5e1; flex-basis: 100%; font-size: .72rem; }
+@media(max-width:540px) { .nora-output-choice { flex: 1 1 120px; } }

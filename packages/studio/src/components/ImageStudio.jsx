@@ -2,7 +2,7 @@
 
 import { NoraGalleryActions, noraDownloadOriginal } from "@nora/ui";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, NoraParameterControls, noraReferenceError } from "@nora/ui";
+import { NoraOutputPresets, noraHasOutputPresets, NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, NoraParameterControls, noraReferenceError } from "@nora/ui";
 import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateImage, generateI2I, uploadFile } from "../muapi.js";
@@ -1198,7 +1198,7 @@ export default function ImageStudio({
   const currentMode = imageMode ? "i2i" : "t2i";
   const selectedVariant = imageModelCatalog.variantById.get(selectedModelId);
   const selectedNativeModel = selectedVariant?.model || (imageMode ? getI2IModelById(selectedModelId) : getModelById(selectedModelId));
-  const supplementalInputs = getSupplementalModelInputs(selectedNativeModel).filter(input => input.key !== "seed");
+  const supplementalInputs = getSupplementalModelInputs(selectedNativeModel).filter(input => input.key !== "seed" && input.key !== "size");
   const referenceVariant = getImageReferenceVariant(
     imageModelCatalog,
     selectedFamily,
@@ -1398,6 +1398,7 @@ export default function ImageStudio({
           if (imageMode) {
             const genParams = {
               model: selectedModelId,
+              ...(noraHasOutputPresets(selectedModelId) ? modelParameterValues : {}),
               ...buildSupplementalInputPayload(
                 selectedNativeModel,
                 modelParameterValues,
@@ -1419,6 +1420,7 @@ export default function ImageStudio({
             });
             const genParams = {
               model: selectedModelId,
+              ...(noraHasOutputPresets(selectedModelId) ? modelParameterValues : {}),
               ...buildSupplementalInputPayload(
                 selectedNativeModel,
                 modelParameterValues,
@@ -1641,6 +1643,11 @@ export default function ImageStudio({
           </div>
 
           {/* Bottom row: controls + generate */}
+          <NoraOutputPresets key={selectedModelId} modelId={selectedModelId} values={{...modelParameterValues, aspect_ratio:selectedAr, ...(currentQualityField ? {[currentQualityField]:selectedQuality} : {})}} onChange={patch => {
+            if (patch.aspect_ratio !== undefined) setSelectedAr(patch.aspect_ratio);
+            if (currentQualityField && patch[currentQualityField] !== undefined) setSelectedQuality(patch[currentQualityField]);
+            setModelParameterValues(values => ({...values,...patch}));
+          }} />
           <NoraSummary params={{model:selectedModelId,prompt,...modelParameterValues,aspect_ratio:selectedAr,...(currentQualityField?{[currentQualityField]:selectedQuality}:{}),images_list:uploadedImageUrls}} />
           <PromptFooter>
             {/* Left controls */}
@@ -1698,7 +1705,7 @@ export default function ImageStudio({
               <NoraSeedControl modelId={selectedModelId} value={modelParameterValues.seed} onChange={value => setModelParameterValues(values => ({...values, seed:value}))} />
 
               {/* Aspect ratio button */}
-              {currentAspectRatios.length > 0 && (<div className="relative">
+              {!noraHasOutputPresets(selectedModelId) && currentAspectRatios.length > 0 && (<div className="relative">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1731,7 +1738,7 @@ export default function ImageStudio({
               </div>)}
 
               {/* Quality/resolution button (represented as Diamond icon) */}
-              {showQualityBtn && (
+              {!noraHasOutputPresets(selectedModelId) && showQualityBtn && (
                 <div className="relative">
                   <button
                     type="button"

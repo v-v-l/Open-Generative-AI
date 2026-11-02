@@ -112,6 +112,10 @@ def catalog():
     result = []
     for row in rows:
         row = dict(row)
+        # Cache files predate dependent output choices. Publish the same rule
+        # enforced at validation without refreshing unrelated pinned endpoints.
+        if row.get('kind') == 'video' and row.get('remote_model','').startswith('google/veo-') and '4K' in row.get('settings',{}).get('resolution',{}).get('values',[]):
+            row['output_constraints'] = [{'when':{'resolution':'4K'}, 'allowed':{'duration':[8]}}]
         row["credential_configured"] = bool(keys.get("OPENAI_API_KEY" if row["provider"] == "openai" else "OPENROUTER_API_KEY"))
         row["availability"] = "catalogued_not_account_verified"
         account_snapshot = ROOT / "work/provider-api-research/openai-account-image-models.json"

@@ -2,7 +2,7 @@
 
 import { NoraGalleryActions, noraDownloadOriginal } from "@nora/ui";
 import { useState, useEffect, useRef, useCallback, useMemo, useId } from "react";
-import { NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, NoraParameterControls, noraReferenceInputs, noraReferenceError } from "@nora/ui";
+import { NoraOutputPresets, noraHasOutputPresets, NoraSummary, NoraAttachments, NoraComposer, NoraSeedControl, NoraParameterControls, noraReferenceInputs, noraReferenceError } from "@nora/ui";
 import { isReadOnly as noraReadOnly, modelUnavailable as noraModelUnavailable, isUploading as noraIsUploading } from "@nora/runtime";
 import toast, { Toaster } from "react-hot-toast";
 import { generateVideo, generateI2V, processV2V, uploadFile } from "../muapi.js";
@@ -2765,6 +2765,13 @@ export default function VideoStudio({
           )}
 
           {/* Bottom row: controls + generate */}
+          <NoraOutputPresets key={selectedModel} modelId={selectedModel} values={{...modelParameterValues, aspect_ratio:selectedAr, duration:selectedDuration, resolution:selectedResolution, quality:selectedQuality}} onChange={patch => {
+            if (patch.aspect_ratio !== undefined) setSelectedAr(patch.aspect_ratio);
+            if (patch.duration !== undefined) setSelectedDuration(patch.duration);
+            if (patch.resolution !== undefined) setSelectedResolution(patch.resolution);
+            if (patch.quality !== undefined) setSelectedQuality(patch.quality);
+            setModelParameterValues(values => ({...values,...patch}));
+          }} />
           <NoraSummary params={{model:selectedModel,prompt,...modelParameterValues,aspect_ratio:selectedAr,duration:selectedDuration,resolution:selectedResolution,quality:selectedQuality,...noraReferenceInputs(selectedModel,{imageUrls:uploadedImageUrls,endImageUrl:uploadedEndImageUrl,videoUrls:uploadedVideoUrls,audioUrls:uploadedAudioUrls})}} />
           <PromptFooter>
             <PromptControls ref={dropdownRef}>
@@ -2985,7 +2992,7 @@ export default function VideoStudio({
               <NoraSeedControl modelId={selectedModel} value={modelParameterValues.seed} onChange={value => setModelParameterValues(values => ({...values, seed:value}))} />
 
               {/* Aspect ratio btn */}
-              {showAr && getCurrentAspectRatios(selectedModel).length > 0 && (
+              {!noraHasOutputPresets(selectedModel) && showAr && getCurrentAspectRatios(selectedModel).length > 0 && (
                 <div className="relative">
                   <button
                     type="button"
@@ -3101,7 +3108,7 @@ export default function VideoStudio({
                   copy={groupCopy}
                 />
               )}
-              {!groupedConfiguration && showDuration && getCurrentDurations(selectedModel).length > 0 && (
+              {!noraHasOutputPresets(selectedModel) && !groupedConfiguration && showDuration && getCurrentDurations(selectedModel).length > 0 && (
                 <div className="relative">
                   <button
                     type="button"
@@ -3152,7 +3159,7 @@ export default function VideoStudio({
                 onSelect={handleGroupedResolutionChange}
                 copy={groupCopy}
               />
-              {!groupedConfiguration && showResolution && (
+              {!noraHasOutputPresets(selectedModel) && !groupedConfiguration && showResolution && (
                 <div className="relative">
                   <button
                     type="button"

@@ -117,6 +117,24 @@ class CloudContracts(unittest.TestCase):
         self.assertEqual(body["prompt"], "literal [Static shot]")
         self.assertEqual(result["billing"]["actual_usd"], .12)
 
+    def test_cached_veo_presets_publish_the_same_dependent_duration_rule_as_validation(self):
+        cached = {'models':cloud._bootstrap(),'refreshed_at':'preserve-pinned-catalog'}
+        self.cache_path = self.root/'catalog.json'
+        self.cache_path.write_text(json.dumps(cached))
+        original = self.cache_path.read_bytes()
+        rows = cloud.catalog()
+        for slug in cloud.VEO:
+            model = next(row for row in rows if row['remote_model']==slug)
+            if '4K' not in model['settings']['resolution']['values']:
+                self.assertNotIn('output_constraints',model)
+                continue
+            self.assertEqual(model['output_constraints'],[{'when':{'resolution':'4K'},'allowed':{'duration':[8]}}])
+            job = dict(self.veo_job(),model=model['id'],resolution='4K',duration=6)
+            with self.assertRaisesRegex(ValueError,'8 seconds'):
+                cloud.validate_job(job,[])
+            cloud.validate_job(dict(job,duration=8),[])
+        self.assertEqual(self.cache_path.read_bytes(),original)
+
     def test_cancel_after_video_acceptance_retains_provider_job_and_unknown_charge(self):
         checks = iter([False, True])
         with patch.object(cloud, "_request", return_value={"id": "gen-vid-pending", "status": "pending"}) as request:

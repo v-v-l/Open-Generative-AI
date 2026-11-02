@@ -25,6 +25,8 @@ flowchart TD
   Inputs --> Clipboard[Optional clipboard image upload; role/count guards]
   Clipboard --> Settings
   Inputs --> Settings[Set supported controls; random seed by default]
+  Settings --> Presets[Choose compatible format, resolution and duration presets]
+  Presets --> Quote
   Settings --> Quote[Review estimate or unknown cost and published rates]
   Quote --> Enqueue[Add to persistent queue]
   Enqueue --> Sidebar[Open queue sidebar from hamburger]

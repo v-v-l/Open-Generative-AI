@@ -9,6 +9,7 @@ import { NoraGalleryActions } from "./galleryActions.jsx";
 export { NoraGalleryActions, noraDownloadOriginal } from "./galleryActions.jsx";
 export { NoraSeedControl } from "./seed.jsx";
 export { NoraParameterControls } from "./parameters.jsx";
+export { NoraOutputPresets, noraHasOutputPresets } from "./outputPresets.jsx";
 import { supportsSeed, modelDisplayName } from "./catalog.js";
 export { referenceInputs as noraReferenceInputs } from "./api.js";
 export function useRuntime() {
