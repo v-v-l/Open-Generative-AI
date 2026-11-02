@@ -1,6 +1,6 @@
 # Nora generation journey
 
-Verified against OpenRouter avatar implementation `48d7a14` and live production, 2026-11-02.
+Verified against output-preset implementation `af473c0` and live production, 2026-11-02.
 See the deployment ledger for source revisions and live browser verification.
 
 ```mermaid

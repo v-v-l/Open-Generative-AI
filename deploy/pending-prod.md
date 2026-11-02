@@ -326,3 +326,24 @@ media intact, with no automatic retries. Reference library data was unchanged.
 Evidence outside Git: work/openrouter-heygen-h3-v1/{video-models.json,openapi.txt,
 backend-tests.log,frontend-check.log,frontend-tests.log,frontend-build.log,
 live-catalog.json,live-verification.json,live-browser.log,live-mobile.png}.
+
+## Promoted — 2026-11-02: compatible output presets
+
+Release `nora-v4l-output-presets`, implementation source `af473c0`.
+
+- [x] Shared format/resolution/duration controls use existing model descriptors in both studios. Literal cloud resolution tiers/durations are retained; OpenAI fixed sizes map to actual aspect ratios with separate generation quality. Duplicate primary controls are hidden.
+- [x] Native Qwen/H3 presets derive exact formats and dimensions from32-pixel executor constraints, capped at1536px per dimension. Actual dimensions and approximate tiers are visible; no unsupported2K option. H3 duration choices encode valid17k+5 frame counts and display actual approximate seconds.
+- [x] Recreated custom dimensions/frame counts remain untouched and clearly labelled until explicit selection. Standard-format selection enables compatible native resolution tiers. Existing advanced native controls and parameter Apply/Cancel semantics remain.
+- [x] Published Veo4K→8s constraint metadata from catalog reads without modifying or refreshing cache rows. The UI reconciles duration with visible feedback and filters incompatible options; backend validation remains authoritative.
+- [x] Full backend108 tests:104 passed,4 disposable-PostgreSQL cases skipped. Agent verified all8 frontend test files, typecheck/check, production build,12 native-studio preset browser flows and18 gallery/Avatar regression checks with isolated fixtures. Parent reviewed the diff and mobile render; whitespace gate passed.
+- [x] Safely promoted backend/frontend with paused/idle queue and private candidate authentication/Host/peer gate. Live browser checked8 preset behaviors: exact Qwen/H3 dimensions and frame payloads, retained custom H3 defaults, Veo constraint metadata/4K8s request, mobile fit and zero page errors.
+- [x] Preserved all34 original job IDs; no new jobs/uploads or paid tests. Three test submissions were intercepted in the browser. Restored original queue state after confirming no unfinished jobs; removed private browser-state file and stopped owned test browser/mock server.
+
+No dependencies, SQL migrations, services, credentials or catalog-cache mutations.
+Previous immutable release retained for rollback; reference files and generation
+history are unchanged. Model tiers are not claims of paid output/performance tests.
+
+Evidence outside Git: work/studio-output-presets-v1/{state-before.json,
+queue-before-deploy.json,backend-tests.log,live-verification.json,live-browser.log,
+live-mobile.png}. Fixture regression source lives in nora/tests/outputPresets.*;
+its mobile screenshot is /tmp/nora-output-presets-mobile.png.
