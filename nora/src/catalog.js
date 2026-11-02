@@ -18,9 +18,21 @@ export function modelDisplayName(model) {
   return model.label;
 }
 // Translate only verified backend capabilities; do not infer provider support from a product name.
+export function settingInput(spec) {
+  const type = spec.type === "enum"
+    ? typeof (spec.default ?? spec.values?.[0]) === "number" ? "number" : "string"
+    : spec.type || (typeof spec.default === "number" ? "number" : "string");
+  return {
+    ...spec,
+    type,
+    ...(spec.values ? { enum: spec.values } : {}),
+    ...(spec.properties ? { properties: Object.fromEntries(Object.entries(spec.properties).map(([key, child]) => [key, settingInput(child)])) } : {}),
+    ...(spec.items ? { items: settingInput(spec.items) } : {}),
+  };
+}
 export function modelFromDescriptor(m, mode) {
   const inputs = {
-    prompt: { type: "string", title: "Prompt", name: "prompt" },
+    prompt: { type: "string", title: m.prompt_label || "Prompt", name: "prompt" },
   };
   for (const [key, spec] of Object.entries(m.settings || {})) {
     if (key === "seed") {
@@ -35,13 +47,8 @@ export function modelFromDescriptor(m, mode) {
       continue;
     }
     inputs[key] = {
-      type:
-        spec.type === "boolean"
-          ? "boolean"
-          : typeof spec.default === "number"
-            ? "number"
-            : "string",
-      title: key.replaceAll("_", " "),
+      ...settingInput(spec),
+      title: spec.title || key.replaceAll("_", " "),
       name: key,
       ...(spec.values ? { enum: spec.values } : {}),
       ...(spec.default !== undefined ? { default: spec.default } : {}),

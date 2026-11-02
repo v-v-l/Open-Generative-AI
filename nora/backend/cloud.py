@@ -31,6 +31,7 @@ VIDEO_SOURCE = "https://openrouter.ai/api/v1/videos/models"
 GOOGLE_IMAGES = ("google/gemini-2.5-flash-image", "google/gemini-3-pro-image", "google/gemini-3.1-flash-image",
                  "google/gemini-3.1-flash-lite-image", "google/gemini-nano-banana-2.1")
 VEO = ("google/veo-3.1", "google/veo-3.1-fast", "google/veo-3.1-lite")
+REQUESTED_VIDEOS = ("heygen/heygen-video-1", "heygen/avatar-iv", "minimax/hailuo-3-max")
 OPENAI_MODELS = ("gpt-image-2.5-sunburst", "gpt-image-2.5-sunburst-2026-09-08",
                  "gpt-image-2.5-flare", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2",
                  "gpt-image-1.5", "gpt-image-1-mini")
@@ -203,7 +204,28 @@ def _request(url, payload=None, headers=None, timeout=60, raw=False):
 
 
 def _video_descriptor(model, timestamp):
-    """Only generation models with explicit native duration/shape metadata fit."""
+    """Use catalog shapes; speech-led Avatar IV has its own explicit contract."""
+    if model['id'] == 'heygen/avatar-iv':
+        if not all(model.get(key) for key in ('supported_resolutions', 'supported_aspect_ratios')) or 'voice_id' not in model.get('allowed_passthrough_parameters', []):
+            return None
+        row = {'id':'openrouter:'+model['id'], 'remote_model':model['id'], 'provider':'openrouter', 'kind':'video',
+                'label':'HeyGen · Avatar IV', 'adapter':'heygen_avatar_script', 'roles':{'image':1}, 'required_roles':{'image':1}, 'max_assets':1,
+                'settings':{'resolution':_enum(model['supported_resolutions'],model['supported_resolutions'][0]),
+                            'aspect_ratio':_enum(model['supported_aspect_ratios'],'9:16' if '9:16' in model['supported_aspect_ratios'] else model['supported_aspect_ratios'][0]),
+                            'voice_id':{'type':'string','required':True,'max_length':200,'title':'Голос HeyGen · Voice ID','description':'ID голоса HeyGen для озвучки текста речи.'},
+                            'motion_prompt':{'type':'string','max_length':2000,'title':'Движения и жесты','description':'Не произносится; отдельная инструкция движения.'},
+                            'expressiveness':_enum(['low','medium','high'],'low'), 'fit':_enum(['contain','cover'],'contain'),
+                            'remove_background':{'type':'boolean','default':False}},
+                'passthrough_keys':[key for key in ('voice_id','motion_prompt','expressiveness','fit','remove_background') if key in model.get('allowed_passthrough_parameters',[])],
+                'prompt_label':'Текст речи', 'input_note':'Одно фото + текст речи. Укажите Voice ID HeyGen в параметрах. Аудиофайлы пока не подключены.',
+                'pricing':model.get('pricing_skus',{}), 'rate_per_second':float(model.get('pricing_skus',{}).get('duration_seconds',0)) or None,
+                'pricing_source':VIDEO_SOURCE,'timestamp':timestamp,'catalog_source':VIDEO_SOURCE,'generation_verified':False,
+                'note':'Avatar script adapter: image input_references and prompt as speech; required voice_id in provider.options.heygen.parameters. Source: OpenRouter model page + video schema and HeyGen image-to-video docs. No fixed duration/seed/audio toggle. Uploaded audio is not exposed: inline audio transport unverified. No paid verification.'}
+        optional = {'motion_prompt','expressiveness','fit','remove_background'}
+        row['settings'] = {key:value for key,value in row['settings'].items() if key not in optional or key in row['passthrough_keys']}
+        rate = row['rate_per_second']
+        row['pricing_note'] = (f'${rate:g} за секунду результата; ' if rate else '')+'длительность определяется речью. Итог после генерации.'
+        return row
     if not all(model.get(key) for key in ("supported_durations", "supported_resolutions", "supported_aspect_ratios")):
         return None
     settings = {}
@@ -217,11 +239,37 @@ def _video_descriptor(model, timestamp):
         settings["seed"] = {"type": "boolean", "default": True}
     roles = {role: 1 for role, native in (("start", "first_frame"), ("end", "last_frame")) if native in (model.get("supported_frame_images") or [])}
     slug = model["id"]
-    return {"id": "openrouter:" + slug, "remote_model": slug, "provider": "openrouter", "kind": "video",
+    row = {"id": "openrouter:" + slug, "remote_model": slug, "provider": "openrouter", "kind": "video",
             "label": "OpenRouter · " + model.get("name", slug), "roles": roles, "max_assets": sum(roles.values()),
             "settings": settings, "pricing": model.get("pricing_skus", {}), "pricing_source": VIDEO_SOURCE,
             "timestamp": timestamp, "catalog_source": VIDEO_SOURCE, "generation_verified": False,
             "note": "Native OpenRouter video generation catalog. Only frame roles and controls advertised by that model are exposed. Arbitrary image/video/audio references, continuation, upscaling and editing need separate model-specific adapters. Inline frames follow schema/open-source clients; no paid studio verification."}
+    if slug in REQUESTED_VIDEOS:
+        rates = [f'{resolution}: ${float(row["pricing"]["duration_seconds_"+resolution.lower()]):g}/с'
+                 for resolution in model['supported_resolutions'] if 'duration_seconds_'+resolution.lower() in row['pricing']]
+        row['pricing_note'] = ' · '.join(rates)+('. С фото — стоимость после генерации. Акционные скидки не предполагаются.' if slug.startswith('heygen/') else '. По тарифам каталога; итог по usage.')
+    return row
+
+
+def refresh_requested_videos():
+    """GET-only targeted discovery preserves all unrelated model/endpoint settings."""
+    timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
+    source = _request(VIDEO_SOURCE)
+    models = source.get('data',[]) if isinstance(source,dict) else source
+    selected = {model['id']:_video_descriptor(model,timestamp) for model in models if model['id'] in REQUESTED_VIDEOS}
+    if set(selected) != set(REQUESTED_VIDEOS) or not all(selected.values()):
+        raise ValueError('Requested video models or required capabilities are missing; catalog unchanged')
+    saved = json.loads(CACHE.read_text()) if CACHE.is_file() else {'models':_bootstrap()}
+    replaced = {'openrouter:'+slug for slug in selected}
+    rows = [selected[row['remote_model']] if row.get('id') in replaced else row for row in saved['models']]
+    present = {row['id'] for row in rows}
+    rows.extend(row for row in selected.values() if row['id'] not in present)
+    saved.update(models=rows,requested_videos_refreshed_at=timestamp)
+    saved['excluded_models'] = [row for row in saved.get('excluded_models',[]) if row.get('model') not in selected]
+    CACHE.parent.mkdir(parents=True,exist_ok=True)
+    temporary = CACHE.with_suffix('.requested.tmp')
+    temporary.write_text(json.dumps(saved,indent=2));temporary.replace(CACHE)
+    return list(selected)
 
 
 def _image_descriptor(model, endpoint, timestamp):
@@ -315,6 +363,13 @@ def _settings(job, model):
                 result[key] = job[key]
             continue
         value = job.get(key, spec.get("default"))
+        if spec.get('required') and (not isinstance(value,str) or not value.strip()):
+            raise ValueError(spec.get('title',key)+': required for the selected model')
+        if spec['type'] == 'string':
+            if value is None or value == '':
+                continue
+            if not isinstance(value,str) or len(value) > spec.get('max_length',30000):
+                raise ValueError(f'Invalid {key} for selected cloud model')
         if spec["type"] == "enum" and value not in spec["values"]:
             raise ValueError(f"Unsupported {key} for selected cloud model")
         if spec["type"] == "boolean" and not isinstance(value, bool):
@@ -377,6 +432,15 @@ def estimate(job, assets):
         price = float(model["pricing"].get(key + suffix, model["pricing"][key])) * settings["duration"]
         result.update(estimated_usd=price, estimate_usd=price, upper_usd=price, status="catalog_estimate",
                       uncertainty="Catalog SKU estimate, not a settled charge; provider usage after completion is authoritative.")
+    elif model['remote_model'] in ('minimax/hailuo-3-max','heygen/heygen-video-1') and not (model['remote_model']=='heygen/heygen-video-1' and assets):
+        key = 'duration_seconds_'+settings['resolution'].lower()
+        raw = model['pricing'].get(key,model['pricing'].get('duration_seconds'))
+        if raw is not None:
+            price = float(raw)*settings['duration']
+            result.update(estimated_usd=price,estimate_usd=price,upper_usd=price,status='catalog_estimate',
+                          uncertainty='Published catalog rate times requested seconds. Promotions/discounts are not assumed; returned usage.cost is authoritative.')
+    elif model.get('adapter') == 'heygen_avatar_script':
+        result['uncertainty'] = 'Avatar IV is billed per output second. Speech duration is unknown before generation; no word-count duration or total price is invented.'
     elif model["kind"] == "video":
         result["uncertainty"] = "This model uses a different duration/token/input pricing formula. Raw catalog SKUs are shown; no unsupported per-video quote is invented. Returned usage.cost is authoritative."
     return result
@@ -389,6 +453,21 @@ def _data_image(asset):
         buffer = io.BytesIO()
         ImageOps.exif_transpose(image).convert("RGB").save(buffer, format="PNG")
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+
+
+def _video_payload(job, assets, model):
+    settings = _settings(job,model)
+    if model.get('adapter') == 'heygen_avatar_script':
+        keys = set(model['passthrough_keys'])
+        return {'model':model['remote_model'],'prompt':job['prompt'],
+                **{key:value for key,value in settings.items() if key not in keys},
+                'input_references':[{'type':'image_url','image_url':{'url':_data_image(asset)}} for asset in assets],
+                'provider':{'options':{'heygen':{'parameters':{key:value for key,value in settings.items() if key in keys}}}}}
+    payload = {'model':model['remote_model'],'prompt':job['prompt'],**settings}
+    if assets:
+        payload['frame_images'] = [{'type':'image_url','image_url':{'url':_data_image(asset)},
+                                    'frame_type':'first_frame' if asset['role']=='start' else 'last_frame'} for asset in assets]
+    return payload
 
 
 def _save(path, data):
@@ -515,10 +594,7 @@ def run_job(job, job_dir, assets, progress, cancelled):
                 payload["input_references"] = [{"type": "image_url", "image_url": {"url": _data_image(a)}} for a in assets]
             result = _request(ORIGIN + "/images", payload, headers, timeout=600)
         else:
-            payload = {"model": model["remote_model"], "prompt": job["prompt"], **_settings(job, model)}
-            if assets:
-                payload["frame_images"] = [{"type": "image_url", "image_url": {"url": _data_image(a)},
-                                            "frame_type": "first_frame" if a["role"] == "start" else "last_frame"} for a in assets]
+            payload = _video_payload(job, assets, model)
             result = _request(ORIGIN + "/videos", payload, headers, timeout=90)
         ident = result.get("id") or result.get("_request_id")
         if model["kind"] == "photo":

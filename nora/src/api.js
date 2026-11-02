@@ -97,9 +97,13 @@ export function buildJob(params) {
   };
   if (params.max_cost_usd) job.max_cost_usd = Number(params.max_cost_usd);
   if (["openai", "openrouter"].includes(m.provider)) {
-    for (const [key, spec] of Object.entries(m.settings || {}))
-      if (key !== "seed")
-        job[key] = params[key] ?? spec.default ?? spec.values?.[0];
+    for (const [key, spec] of Object.entries(m.settings || {})) {
+      if (key === "seed") continue;
+      const value = params[key] ?? spec.default ?? spec.values?.[0];
+      if (spec.required === true && (value == null || (typeof value === "string" && !value.trim())))
+        throw Error(`Заполните параметр «${spec.title || key.replaceAll("_", " ")}».`);
+      if (value !== undefined && value !== "") job[key] = value;
+    }
   } else {
     for (const key of [
       "width",

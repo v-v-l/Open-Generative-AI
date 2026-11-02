@@ -20,6 +20,8 @@ flowchart TD
   LoRA --> Export[Preview or download originals/ZIP; no training]
   Studio --> Model[Choose configured model]
   Model --> Inputs[Attach supported references and enter prompt]
+  Model --> Avatar[Avatar IV: one photo, spoken script and HeyGen Voice ID]
+  Avatar --> Settings
   Inputs --> Clipboard[Optional clipboard image upload; role/count guards]
   Clipboard --> Settings
   Inputs --> Settings[Set supported controls; random seed by default]

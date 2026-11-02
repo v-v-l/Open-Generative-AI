@@ -6,6 +6,7 @@ preserved separately in the original README below the fork notice.
 ## [Unreleased]
 
 ### Added
+- OpenRouter Avatar IV photo-and-script generation with required HeyGen Voice ID, separate gesture instructions and typed provider settings; explicit HeyGen Video/H3 Max capability and catalog-price checks.
 - Open a prior gallery/queue job with **Пересоздать** to edit its full prompt, model, seed, settings and original reference roles before submitting; no automatic generation.
 - Paste clipboard images into the photo/video composer with Ctrl/⌘V, using the supported reference roles and existing upload limits.
 - Browse reference sets by hairstyle/body/look, open their individual originals and download an ordered no-crop 4×2 sheet or original ZIP; historical sets remain accessible through the archive filter.

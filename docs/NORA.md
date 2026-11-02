@@ -256,3 +256,18 @@ draft unchanged and show an error. Wait for current uploads to finish first.
 Gallery download buttons retrieve the authenticated original from
 `/media/ID?download=1`, retaining its filename, MIME type and original bytes.
 The same URL without the flag stays available for inline image/video viewing.
+
+### HeyGen and H3 Max through OpenRouter
+
+Choose **OpenRouter** in the Video Studio model picker. HeyGen Video offers text
+or a first frame, and H3 Max offers text or first/last frames. Their duration and
+resolution choices come from the provider catalog; no local LoRA is sent.
+
+For **HeyGen · Avatar IV**, attach one photograph and enter the actual words to
+speak in **Текст речи**. Set **Голос HeyGen · Voice ID** in Parameters. The optional
+motion prompt describes gestures separately and is not part of the spoken script.
+There are no fixed duration, seed or audio-toggle controls. Uploaded audio is not
+connected in this adapter; only the documented photo-and-script mode is exposed.
+The output duration follows speech, so the catalog rate is visible but the total
+price remains unknown until generation returns usage. No automatic paid test is
+used to enable a model.

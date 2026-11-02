@@ -124,6 +124,8 @@ export function NoraSummary({ params }) {
           </div>
         </details>
       </div>
+      {model.input_note && <p className="nora-input-note">{model.input_note}</p>}
+      {model.pricing_note && <small className="nora-pricing-note">{model.pricing_note}</small>}
       {(unavailable || error) && (
         <p className="nora-warning" role="status">
           {unavailable || error}

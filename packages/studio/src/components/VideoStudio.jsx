@@ -2708,7 +2708,8 @@ export default function VideoStudio({
                 ref={textareaRef}
                 value={prompt}
                 onChange={handlePromptInput}
-                placeholder={promptPlaceholder}
+                aria-label={currentModelObj?.inputs?.prompt?.title || "Prompt"}
+                placeholder={currentModelObj?.inputs?.prompt?.title === "Текст речи" ? "Текст, который произнесёт персонаж" : promptPlaceholder}
                 disabled={promptDisabled}
               />
               )}
